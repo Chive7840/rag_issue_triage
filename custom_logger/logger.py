@@ -129,7 +129,7 @@ class CustomFileHandler(logging.FileHandler):
     def __init__(self):
         """The CustomFileHandler class provides formatting, encoding type and a default logging level for logging file
         output as part of the Logger class."""
-        log_file = "logging/log_file.log"
+        log_file = "custom_logger/log_file.log"
         super().__init__(log_file, encoding="UTF-8")
         formatter = logging.Formatter(
             "%(asctime)s - %(levelname)s - %(message)s",
