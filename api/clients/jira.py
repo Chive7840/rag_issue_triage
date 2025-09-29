@@ -2,16 +2,15 @@
 from __future__ import annotations
 
 from custom_logger.logger import Logger
-
 import logging
-from typing import Any, Mapping
-
-import httpx
-
 # Sets the default logging class
 logging.setLoggerClass(Logger)
 # Instantiates the logger with a built-in variable that provides the module's name
 logger = logging.getLogger(__name__)
+
+from typing import Any, Mapping
+
+import httpx
 
 class JiraClient:
     def __init__(self, base_url: str, email: str, api_token: str) -> None:
