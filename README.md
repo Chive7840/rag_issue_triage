@@ -11,11 +11,13 @@ This repository demos a Retrieval-Augmented Generation (RAG) copilot that triage
 
 ```
 /api              FastAPI application, services, and webhook routers
+/custom_logger    Custom logging class to ensure consistent messaging and formatting
 /worker           Redis queue worker for embeddings and similar issues
 /web              React + Vite dashboard (queue, detail, search)
 /db               Postgres schema with pgvector indexes
 /eval             Offline duplicate detection evaluation script
 /ops              Docker Compose and runtime Dockerfiles
+/tests            Unit tests for all functions within each module
 ```
 
 ### API Highlights
