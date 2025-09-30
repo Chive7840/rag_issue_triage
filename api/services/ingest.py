@@ -1,0 +1,87 @@
+"""Ingestion helpers for GitHub and Jira events."""
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from typing import Any
+
+import asyncpg
+
+from ..schemas import IssuePayload
+
+import logging
+from custom_logger.logger import Logger
+logging.setLoggerClass(Logger)
+logger = logging.getLogger(__name__)
+
+async def store_issue(pool: asyncpg.Pool, issue: IssuePayload) -> int:
+    """Insert or update an issue row and return its primary key."""
+    async with pool.acquire() as conn:
+        record = await conn.fetchrow(
+            """
+            INSERT INTO issues (source, external_key, title, body, repo, project, status, created_at, raw_json)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (source, external_key) DO UPDATE SET
+                title = EXCLUDED.title,
+                body = EXCLUDED.body,
+                repo = EXCLUDED.repo,
+                project = EXCLUDED.project,
+                status = EXCLUDED.status,
+                raw_json = EXCLUDED.raw_json
+            RETURNING id
+            """,
+            issue.source,
+            issue.external_key,
+            issue.title,
+            issue.body,
+            issue.project,
+            issue.status,
+            issue.created_at,
+            issue.raw_json,
+        )
+        assert record is not None
+        logger.debug(f"Upserted issue {issue.external_key} from {issue.source}",
+                     extra={"external_key": issue.external_key, "source": issue.source})
+
+        return int(record["id"])
+
+def normalize_github_issue(payload: dict[str, Any]) -> IssuePayload:
+    issue = payload.get("issue") or payload
+    repository = payload.get("repository", {})
+    repo_full_name = repository.get("full_name")
+    body = issue.get("body") or ""
+    created_at = issue.get("created_at") or datetime.now(timezone.utc).isoformat()
+    number = issue.get("number") or issue.get("id")
+    external_key = f"{repo_full_name}#{number}" if repo_full_name and number else str(issue.get("id"))
+    return IssuePayload(
+        source="github",
+        external_key=external_key,
+        title=issue.get("title", ""),
+        body=body,
+        repo=repo_full_name,
+        project=None,
+        status=issue.get("state"),
+        created_at=datetime.fromisoformat(created_at.replace("z", "+00:00")),
+        raw_json=payload,
+    )
+
+def normalize_jira_issue(payload: dict[str, Any]) -> IssuePayload:
+    issue = payload.get("issue") or payload
+    fields = issue.get("fields", {})
+    created_at = fields.get("created") or datetime.now(timezone.utc).isoformat()
+    return IssuePayload(
+        source="jira",
+        external_key=issue.get("key") or str(issue.get("id")),
+        title=fields.get("summary", ""),
+        body=(fields.get("description") or ""),
+        repo=None,
+        project=fields.get("project", {}).get("key"),
+        status=fields.get("status", {}).get("name"),
+        created_at=datetime.fromisoformat(created_at.replace("z", "+00:00")),
+        raw_json=payload,
+    )
+
+async def enqueue_embedding_job(redis, issue_id: int, force: bool = False) -> None:
+    payload = json.dumps({"issue_id": issue_id, "force": force})
+    await redis.rpush("triage:embed", payload)
+    logger.debug(f"Enqueued embedding job for issue {issue_id}")
