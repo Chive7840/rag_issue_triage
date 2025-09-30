@@ -1,0 +1,1 @@
+"""Service layer utilities for ingestion, embeddings, and retrieval."""
