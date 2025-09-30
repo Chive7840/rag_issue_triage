@@ -6,8 +6,8 @@ import hmac
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
-#from ..schemas import HealthResponse TODO: Uncomment after the module is created
-#from ..services import ingest        TODO: Uncomment after the module is created
+from ..schemas import HealthResponse
+from ..services import ingest
 
 import logging
 from custom_logger.logger import Logger
