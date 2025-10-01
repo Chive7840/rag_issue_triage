@@ -18,7 +18,6 @@ async def vector_search(
         embedding: np.ndarray,
         limit: int = 10,
         model: str = "Sentence-transformers/all-MiniLM-L6-v2",
-
 ) -> Sequence[RetrievalResult]:
     vector = embedding.tolist() if hasattr(embedding, "tolist") else embedding
     with logging_context(strategy="vector", limit=limit, model=model):
@@ -27,7 +26,7 @@ async def vector_search(
                 """
                 SELECT i.id, i.title, i.repo, i.project, iv.embedding <-> $1 AS distance
                 FROM issue_vectors iv
-                JOIN issues i on i.id = iv.issue_id
+                JOIN issues i ON i.id = iv.issue_id
                 WHERE iv.model = $2
                 ORDER BY iv.embedding <-> $1
                 LIMIT $3
@@ -43,7 +42,7 @@ async def vector_search(
         if row["repo"]:
             url = f"https://github.com/{row['repo']}/issues/{row['id']}"
         elif row["project"]:
-            url = f"https://{row['project']}.atlassian.net/browse/{row['id']})"
+            url = f"https://{row['project']}.atlassian.net/browse/{row['id']}"
         score = float(1.0 - row["distance"])
         results.append(
             RetrievalResult(
@@ -69,7 +68,7 @@ async def hybrid_search(
             rows = await conn.fetch(
                 """
                 WITH vector_candidates AS (
-                    SELECT iv.issue_id, 1 - (iv.embedding <-> $1) as vector_score
+                    SELECT iv.issue_id, 1 - (iv.embedding <-> $1) AS vector_score
                     FROM issue_vectors iv
                     WHERE iv.model = $4
                     ORDER BY iv.embedding <-> $1
@@ -103,7 +102,7 @@ async def hybrid_search(
     for row in rows:
         url = None
         if row["repo"]:
-            url = f"https://github/{row['repo']}/issues/{row['id']}"
+            url = f"https://github.com/{row['repo']}/issues/{row['id']}"
         elif row["project"]:
             url = f"https://{row['project']}.atlassian.net/browse/{row['id']}"
         score = float(row["vector_score"] * alpha + row["text_score"] * (1 - alpha))

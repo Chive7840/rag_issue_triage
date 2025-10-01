@@ -43,3 +43,17 @@ def test_encode_texts_returns_float32(monkeypatch):
     assert vectors.shape == (2, 3)
     assert vectors.dtype == np.float32
     assert dummy.calls == [["Unit test 2", "function 2"]]
+
+def test_embedding_for_issue_concatenates_title_and_body(monkeypatch):
+    captured = {}
+
+    def fake_encode_texts(texts, model_name="model"):   # noqa: ANN001
+        captured["texts"] = texts
+        return np.array([[0.1, 0.2, 0.3]], dtype=np.float32)
+
+    monkeypatch.setattr(embeddings, "encode_texts", fake_encode_texts)
+
+    vector = embeddings.embedding_for_issue("Title", "Body", model_name="model")
+
+    assert vector.shape == (3,)
+    assert captured["texts"] == ["Title\n\nBody"]
