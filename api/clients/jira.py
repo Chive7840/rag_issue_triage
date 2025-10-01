@@ -2,15 +2,14 @@
 from __future__ import annotations
 
 from custom_logger.logger import Logger
-import logging
-# Sets the default logging class
-logging.setLoggerClass(Logger)
-# Instantiates the logger with a built-in variable that provides the module's name
-logger = logging.getLogger(__name__)
 
 from typing import Any, Mapping
 
 import httpx
+
+from logging_utils import get_logger, logging_context
+
+logger = get_logger("api.clients.jira")
 
 class JiraClient:
     def __init__(self, base_url: str, email: str, api_token: str) -> None:
@@ -41,7 +40,8 @@ class JiraClient:
             json={"body": body},
         )
         resp.raise_for_status()
-        logger.info("Created Jira comment on %s", key)
+        with logging_context(issue_key=key, action="add_comment"):
+            logger.info("Created Jira comment.")
 
     async def transition(self, key: str, transition_id: str) -> None:
         """Describes the statuses the specified work item can move to from its current state."""
@@ -50,7 +50,8 @@ class JiraClient:
             json={"transition": {"id": transition_id}},
         )
         resp.raise_for_status()
-        logger.info("Transitioned %s via %s", key, transition_id)
+        with logging_context(issue_key=key, action="transition", transition_id=transition_id):
+            logger.info("Transitioned issue")
 
     async def assign(self, key: str, account_id: str) -> None:
         """This function allows for users to be assigned to work items."""
@@ -59,7 +60,8 @@ class JiraClient:
             json={"accountId": account_id},
         )
         resp.raise_for_status()
-        logger.info("Assigned %s to %s", key, account_id)
+        with logging_context(issue_key=key, action="assign"):
+            logger.info("Assigned issue", extra={"context": {"account_id": account_id}})
 
 async def with_client(base_url: str, email: str, api_token: str) -> JiraClient:
     client = JiraClient(base_url=base_url, email=email, api_token=api_token)

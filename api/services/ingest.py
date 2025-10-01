@@ -9,10 +9,9 @@ import asyncpg
 
 from ..schemas import IssuePayload
 
-import logging
-from custom_logger.logger import Logger
-logging.setLoggerClass(Logger)
-logger = logging.getLogger(__name__)
+from logging_utils import get_logger, logging_context
+
+logger = get_logger("api.services.ingest")
 
 async def store_issue(pool: asyncpg.Pool, issue: IssuePayload) -> int:
     """Insert or update an issue row and return its primary key."""
@@ -40,9 +39,8 @@ async def store_issue(pool: asyncpg.Pool, issue: IssuePayload) -> int:
             issue.raw_json,
         )
         assert record is not None
-        logger.debug(f"Upserted issue {issue.external_key} from {issue.source}",
-                     extra={"external_key": issue.external_key, "source": issue.source})
-
+        with logging_context(source=issue.source, external_key=issue.external_key):
+            logger.debug("Upserted issue")
         return int(record["id"])
 
 def normalize_github_issue(payload: dict[str, Any]) -> IssuePayload:
@@ -84,4 +82,5 @@ def normalize_jira_issue(payload: dict[str, Any]) -> IssuePayload:
 async def enqueue_embedding_job(redis, issue_id: int, force: bool = False) -> None:
     payload = json.dumps({"issue_id": issue_id, "force": force})
     await redis.rpush("triage:embed", payload)
-    logger.debug(f"Enqueued embedding job for issue {issue_id}")
+    with logging_context(issue_id=issue_id):
+        logger.debug("Enqueued embedding job")

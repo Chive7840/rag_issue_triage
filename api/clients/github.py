@@ -6,7 +6,9 @@ from typing import Any, Mapping
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from logging_utils import get_logger, logging_context
+
+logger = get_logger("api.clients.github")
 
 class GitHubClient:
     """Minimal GitHub REST API wrapper following official docs."""
@@ -37,19 +39,22 @@ class GitHubClient:
         url = f"/repos/{repo}/issues/{number}/labels"
         resp = await self._client.post(url, json={"labels": labels})
         resp.raise_for_status()
-        logger.info("Applied labels %s to %s#%s", labels, repo, number)
+        with logging_context(repo=repo, number=number, action="add_labels"):
+            logger.info("Applied labels", extra={"context": {"labels": labels}})
 
     async def create_comment(self, repo: str, number: int, body: str) -> None:
         url = f"/repos/{repo}/issues/{number}/comments"
         resp = await self._client.post(url, json={"body": body})
         resp.raise_for_status()
-        logger.info("Created comment on %s#%s", repo, number)
+        with logging_context(repo=repo, number=number, action="create_comment"):
+            logger.info("Created comment")
 
     async def assign_issue(self, repo: str, number: int, assignees: list[str]) -> None:
         url = f"/repos/{repo}/issues/{number}/assignees"
         resp = await self._client.post(url, json={"assignees": assignees})
         resp.raise_for_status()
-        logger.info("Assigned %s to %s#%s", assignees, repo, number)
+        with logging_context(repo=repo, number=number, action="assign_issue"):
+            logger.info("Assigned issue", extra={"context": {"assignees": assignees}})
 
 async def with_client(token: str) -> GitHubClient:
     client = GitHubClient(token=token)
