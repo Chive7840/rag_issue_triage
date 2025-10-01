@@ -1,0 +1,2 @@
+-- Placeholder migration script for any future schema changes.
+-- Apply init.sql on first run, then append migrations here as needed
