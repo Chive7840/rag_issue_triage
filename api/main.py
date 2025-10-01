@@ -70,7 +70,7 @@ async def healthcheck(request: Request) -> dict[str, Any]:
         await conn.execute("SELECT 1")
     return {"status": "ok"}
 
-@app.get("search", response_model=SearchResponse)
+@app.get("/search", response_model=SearchResponse)
 async def search(
         q: str = Query(..., min_length=2),
         k: int = Query(10, ge=1, le=50),
@@ -88,5 +88,92 @@ async def search(
         logger.info("Search completed", extra={"context": {"result_count": len(results)}})
         return SearchResponse(query=q, results=results)
 
-## TODO: Add the following functionality after the modules have been created:
-#   - @app.post("triage/approve")
+
+@app.post("/triage/propose", response_model=TriageProposal)
+async def propose_triage(
+        payload: TriageRequest,
+        pool: asyncpg.Pool = Depends(get_db_pool),
+
+) -> TriageProposal:
+    async with pool.acquire() as conn:
+        record = await conn.fetchrow(
+            "SELECT title, body FROM issues WHERE id = $1",
+            payload.issue_id,
+        )
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="issue not found")
+        vector_record = await conn.fetchrow(
+            """
+            SELECT embedding, model
+            FROM issue_vectors
+            WHERE issue_id = $1
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            payload.issue_id,
+        )
+    if vector_record:
+        embedding = np.array(vector_record["embedding"], dtype=np.float32)
+    else:
+        embedding = embeddings.embedding_for_issue(record["title"], record["body"])
+    with logging_context(route="/triage/propose", issue_id=payload.issue_id):
+        logger.info("Generating triage proposal")
+        proposal = await triage.propose(
+            pool,
+            payload.issue_id,
+            embedding,
+            rerank.NoOpReranker(),
+        )
+        logger.info("Proposal generated")
+        return proposal
+
+@app.post("/triage/approve")
+async def approve_triage(
+        payload: ProposalApproval,
+        pool: asyncpg.Pool = Depends(get_db_pool)
+) -> dict[str, Any]:
+    async with pool.acquire() as conn:
+        record = await conn.fetchrow(
+            "SELECT source, repo, project, external_key, raw_json FROM issues WHERE id = $1",
+            payload.issue_id
+        )
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="issue not found")
+    raw = record["raw_json"] or {}
+    if payload.source == "github" and record["source"] == "github":
+        repo = record["repo"]
+        number = raw.get("issue", {}).get("number") or raw.get("number")
+        if not (repo and number):
+            raise HTTPException(status_code=400, detail="missing repo or number")
+        client = GitHubClient(token=app.state.github_token)
+        try:
+            with logging_context(route="/triage/approve", source="github", repo=repo, number=number):
+                logger.info("Applying GitHub triage actions")
+                if payload.labels:
+                    await client.add_labels(repo, number, payload.labels)
+                if payload.assignee:
+                    await client.assign_issue(repo, number, [payload.assignee])
+                if payload.comment:
+                    await client.create_comment(repo, number, payload.comment)
+        finally:
+            await client.close()
+    elif payload.source == "jira" and record["source"] == "jira":
+        base_url = app.state.jira_base_url
+        if not base_url:
+            raise HTTPException(status_code=400, detail="jira base url missing")
+        client = JiraClient(base_url=base_url, email=app.state.jira_email, api_token=app.state.jira_token)
+        key = raw.get("issue", {}).get("key") or raw.get("key")
+        if not key:
+            raise HTTPException(status_code=400, detail="missing jira key")
+        try:
+            with logging_context(route="/triage/approve", source="jira", issue_key=key):
+                logger.info("Applying Jira triage actions")
+                if payload.assignee:
+                    await client.assign(key, payload.assignee)
+                if payload.comment:
+                    await client.add_comment(key, payload.commit)
+        finally:
+            await client.close()
+    else:
+        raise HTTPException(status_code=400, detail="source mismatch")
+    return {"ok": True}
