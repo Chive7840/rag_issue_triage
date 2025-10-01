@@ -8,13 +8,12 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
 from ..schemas import HealthResponse
 from ..services import ingest
+from logging_utils import get_logger, logging_context
 
-import logging
-from custom_logger.logger import Logger
-logging.setLoggerClass(Logger)
-logger = logging.getLogger(__name__)
+logger = get_logger("api.webhooks.github")
 
 router = APIRouter(prefix="/webhooks", tags=["github"])
+
 
 async def verify_signature(
         request: Request,
@@ -24,7 +23,8 @@ async def verify_signature(
     body = await request.body()
     expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, x_hub_signature_256):
-        logger.warning("Github signature mismatch")
+        with logging_context(source="github", reason="signature_mismatch"):
+            logger.warning("GitHub signature mismatch")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid signature")
     return body
 
@@ -39,12 +39,14 @@ async def handle_github(
     redis = request.app.state.redis
     event = x_github_event
 
-    if event in {"issues", "issue_comment", "pull_request"}:
-        normalized = ingest.normalize_github_issue(payload)
-        issue_id = await ingest.store_issue(pool, normalized)
-        await ingest.enqueue_embedding_job(redis, issue_id)
-    else:
-        logger.info("Ignoring GitHub event %s", event)
+    with logging_context(source="github", event=event):
+        if event in {"issues", "issue_comment", "pull_request"}:
+            normalized = ingest.normalize_github_issue(payload)
+            issue_id = await ingest.store_issue(pool, normalized)
+            logger.info("Stored GitHub issue", extra={"context": {"issue_id": issue_id}})
+            await ingest.enqueue_embedding_job(redis, issue_id)
+        else:
+            logger.info("Ignoring GitHub event")
     return {"ok": True}
 
 @router.get("/github/health", response_model=HealthResponse)

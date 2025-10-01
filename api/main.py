@@ -15,15 +15,14 @@ from redis import asyncio as aioredis
 
 from .clients.github import GitHubClient
 from .clients.jira import JiraClient
+from .schemas import ProposalApproval, SearchResponse, TriageProposal, TriageRequest
+from .services import embeddings, retrieve, rerank, triage
+from .webhooks import github as github_webhooks
+from .webhooks import jira as jira_webhooks
+from logging_utils import get_logger, logging_context, setup_logging
 
-from logging_utils import get_logger
-
-def bootstrap_api_logging() -> None:
-    """Initialize logging during API startup."""
-
-    setup_logging()
-    logger = get_logger("api.bootstrap")
-    logger.info("API logging configured", extra={"context": {"component": "api"}})
+setup_logging()
+logger = get_logger("api.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> None:
@@ -32,6 +31,8 @@ async def lifespan(app: FastAPI) -> None:
         logger.error(f"Error type: {RuntimeError}")
         raise RuntimeError("DATABASE_URL is required")
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    with logging_context(component="api", event="startup"):
+        logger.info("Initializing API dependencies")
     app.include_router()    # placeholder for github_webhooks
     app.include_router()    # placeholder for jira_webhooks
     app.state.db_pool = await asyncpg.create_pool(dsn=database_url)
@@ -59,7 +60,6 @@ app.add_middleware(
 )
 
 
-
 async def get_db_pool(request: Request) -> asyncpg.Pool:
     return request.app.state.db_pool
 
@@ -78,12 +78,15 @@ async def search(
         alpha: float = Query(0.5, ge=0.0, le=1.0),
         pool: asyncpg.Pool = Depends(get_db_pool),
 ) -> SearchResponse:
-    embedding = embeddings.encode_texts([q])[0]     # TODO: Remove this note once the services module is created
-    if hybrid_mode:
-        results = await retrieve.hybrid_search(pool, embedding, q, limit=k, alpha=alpha)
-    else:
-        results = await retreive.vector_search(pool, embedding, limit=k)
-    return SearchResponse(query=q, results=results)
+    with logging_context(route="/search", query=q, hybrid=hybrid_mode, limit=k):
+        logger.info("Processing search request")
+        embedding = embeddings.encode_texts([q])[0]
+        if hybrid_mode:
+            results = await retrieve.hybrid_search(pool, embedding, q, limit=k, alpha=alpha)
+        else:
+            results = await retrieve.vector_search(pool, embedding, limit=k)
+        logger.info("Search completed", extra={"context": {"result_count": len(results)}})
+        return SearchResponse(query=q, results=results)
 
 ## TODO: Add the following functionality after the modules have been created:
 #   - @app.post("triage/approve")

@@ -5,11 +5,9 @@ from fastapi import APIRouter, HTTPException, Header, Request, status
 
 from ..schemas import HealthResponse
 from ..services import ingest
+from logging_utils import get_logger, logging_context
 
-import logging
-from custom_logger.logger import Logger
-logging.setLoggerClass(Logger)
-logger = logging.getLogger(__name__)
+logger = get_logger("api.webhooks.jira")
 
 router = APIRouter(prefix="/webhooks", tags=["jira"])
 
@@ -21,14 +19,17 @@ async def handle_jira(
 ):
     expected = request.app.state.jira_webhook_secret
     if expected and x_atlassian_webhook_identifier != expected:
-        logger.warning("Jira webhook identifier mismatch")
+        with logging_context(source="jira", reason="identifier_mismatch"):
+            logger.warning("Jira webhook identifier mismatch")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid identifier")
     payload = await request.json()
     pool = request.app.state.db_pool
     redis = request.app.state.redis
-    normalized = ingest.normalize_jira_issue(payload)
-    issue_id = await ingest.store_issue(pool, normalized)
-    await ingest.enqueue_embedding_job(redis, issue_id)
+    with logging_context(source="jira", event=payload.get("webhookEvent")):
+        normalized = ingest.normalize_jira_issue(payload)
+        issue_id = await ingest.store_issue(pool, normalized)
+        logger.info("Stored Jira issue", extra={"context": {"issue_id": issue_id}})
+        await ingest.enqueue_embedding_job(redis, issue_id)
     return {"ok": True}
 
 @router.get("/jira/health", response_model=HealthResponse)

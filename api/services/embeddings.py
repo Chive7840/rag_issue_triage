@@ -3,19 +3,20 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Iterable
-import logging
-from custom_logger.logger import Logger
-logging.setLoggerClass(Logger)
-logger = logging.getLogger(__name__)
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
+
+from logging_utils import get_logger, logging_context
+
+logger = get_logger("api.services.embeddings")
 
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 @lru_cache(maxsize=1)
 def get_model(model_name : str = DEFAULT_MODEL) -> SentenceTransformer:
-    logger.info("Loading embedding model %s", model_name)
+    with logging_context(component="embeddings", model=model_name):
+        logger.info("Loading embedding model")
     return SentenceTransformer(model_name)
 
 def encode_texts(texts: Iterable[str], model_name: str = DEFAULT_MODEL) -> np.ndarray:
