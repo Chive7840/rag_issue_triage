@@ -3,13 +3,6 @@ from __future__ import annotations
 
 import json
 
-from custom_logger.logger import Logger
-import logging
-# Sets the default logging class
-logging.setLoggerClass(Logger)
-# Instantiates the logger with a built-in variable that provides the module's name
-logger = logging.getLogger(__name__)
-
 import os
 from typing import Any
 
@@ -23,7 +16,14 @@ from redis import asyncio as aioredis
 from .clients.github import GitHubClient
 from .clients.jira import JiraClient
 
+from logging_utils import get_logger
 
+def bootstrap_api_logging() -> None:
+    """Initialize logging during API startup."""
+
+    setup_logging()
+    logger = get_logger("api.bootstrap")
+    logger.info("API logging configured", extra={"context": {"component": "api"}})
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> None:
@@ -36,8 +36,8 @@ async def lifespan(app: FastAPI) -> None:
     app.include_router()    # placeholder for jira_webhooks
     app.state.db_pool = await asyncpg.create_pool(dsn=database_url)
     app.state.redis = aioredis.from_url(redis_url, encoding="utf-8", decode_response=True)
-    app.state.github_webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET", "")     # TODO: Remove this note once the webhooks are completed
-    app.state.jira_webhook_secret = os.getenv("JIRA_WEBHOOK_SECRET", "")         # TODO: Remove this note once the webhooks are completed
+    app.state.github_webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+    app.state.jira_webhook_secret = os.getenv("JIRA_WEBHOOK_SECRET", "")
     app.state.github_token = os.getenv("GITHUB_TOKEN", "")
     app.state.jira_base_url = os.getenv("JIRA_BASE_URL", "")
     app.state.jira_email = os.getenv("JIRA_EMAIL", "")
@@ -57,6 +57,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 async def get_db_pool(request: Request) -> asyncpg.Pool:
     return request.app.state.db_pool
