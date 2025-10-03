@@ -123,8 +123,10 @@ async def propose_triage(
         )
     if vector_record:
         embedding = np.array(vector_record["embedding"], dtype=np.float32)
+        model_name = vector_record["model"]
     else:
         embedding = embeddings.embedding_for_issue(record["title"], record["body"])
+        model_name = embeddings.DEFAULT_MODEL
     with logging_context(route="/triage/propose", issue_id=payload.issue_id):
         logger.info("Generating triage proposal")
         proposal = await triage.propose(
@@ -132,6 +134,7 @@ async def propose_triage(
             payload.issue_id,
             embedding,
             rerank.NoOpReranker(),
+            model_name=model_name,
         )
         logger.info("Proposal generated")
         return proposal
