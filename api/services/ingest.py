@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 
 import asyncpg
@@ -15,6 +15,7 @@ logger = get_logger("api.services.ingest")
 
 async def store_issue(pool: asyncpg.Pool, issue: IssuePayload) -> int:
     """Insert or update an issue row and return its primary key."""
+
     async with pool.acquire() as conn:
         record = await conn.fetchrow(
             """
@@ -38,10 +39,21 @@ async def store_issue(pool: asyncpg.Pool, issue: IssuePayload) -> int:
             issue.created_at,
             issue.raw_json,
         )
-        assert record is not None
-        with logging_context(source=issue.source, external_key=issue.external_key):
-            logger.debug("Upserted issue")
-        return int(record["id"])
+    if record is None:
+        raise RuntimeError("Failed to upsert issue payload")
+    with logging_context(source=issue.source, external_key=issue.external_key):
+        logger.debug("Upserted issue")
+    return int(record["id"])
+
+def _parse_datetime(raw: str | None) -> datetime:
+    if not raw:
+        return datetime.now(tz=UTC)
+    normalized = raw.replace("z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return datetime.now(tz=UTC)
+
 
 def normalize_github_issue(payload: dict[str, Any]) -> IssuePayload:
     issue = payload.get("issue") or payload
@@ -50,7 +62,7 @@ def normalize_github_issue(payload: dict[str, Any]) -> IssuePayload:
     body = issue.get("body") or ""
     created_at = issue.get("created_at") or datetime.now(timezone.utc).isoformat()
     number = issue.get("number") or issue.get("id")
-    external_key = f"{repo_full_name}#{number}" if repo_full_name and number else str(issue.get("id"))
+    external_key = f"{repo_full_name}#{number}" if repo_full_name and number is not None else str(issue.get("id"))
     return IssuePayload(
         source="github",
         external_key=external_key,
@@ -59,7 +71,7 @@ def normalize_github_issue(payload: dict[str, Any]) -> IssuePayload:
         repo=repo_full_name,
         project=None,
         status=issue.get("state"),
-        created_at=datetime.fromisoformat(created_at.replace("z", "+00:00")),
+        created_at=created_at,
         raw_json=payload,
     )
 
