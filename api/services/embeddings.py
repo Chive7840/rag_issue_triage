@@ -7,7 +7,7 @@ from typing import Iterable
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from logging_utils import get_logger, logging_context
+from api.utils.logging_utils import get_logger, logging_context
 
 logger = get_logger("api.services.embeddings")
 

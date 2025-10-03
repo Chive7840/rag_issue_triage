@@ -6,7 +6,7 @@ import numpy as np
 
 from ..schemas import TriageProposal
 from .retrieve import vector_search
-from logging_utils import get_logger, logging_context
+from api.utils.logging_utils import get_logger, logging_context
 
 logger = get_logger("api.services.triage")
 

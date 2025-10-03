@@ -1,13 +1,12 @@
 """Jira cloud REST client covering transitions, comments, and fetches."""
 from __future__ import annotations
 
-from custom_logger.logger import Logger
-
+from contextlib import asynccontextmanager
 from typing import Any, Mapping
 
 import httpx
 
-from logging_utils import get_logger, logging_context
+from api.utils.logging_utils import get_logger, logging_context
 
 logger = get_logger("api.clients.jira")
 
@@ -63,6 +62,7 @@ class JiraClient:
         with logging_context(issue_key=key, action="assign"):
             logger.info("Assigned issue", extra={"context": {"account_id": account_id}})
 
+@asynccontextmanager
 async def with_client(base_url: str, email: str, api_token: str) -> JiraClient:
     client = JiraClient(base_url=base_url, email=email, api_token=api_token)
     try:

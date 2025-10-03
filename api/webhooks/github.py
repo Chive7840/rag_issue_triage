@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
 from ..schemas import HealthResponse
 from ..services import ingest
-from logging_utils import get_logger, logging_context
+from api.utils.logging_utils import get_logger, logging_context
 
 logger = get_logger("api.webhooks.github")
 

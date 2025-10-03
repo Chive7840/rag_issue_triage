@@ -1,12 +1,12 @@
 """GitHub REST client for applying triage decisions and fetching issues."""
 from __future__ import annotations
 
-import logging
+from contextlib import asynccontextmanager
 from typing import Any, Mapping
 
 import httpx
 
-from logging_utils import get_logger, logging_context
+from api.utils.logging_utils import get_logger, logging_context
 
 logger = get_logger("api.clients.github")
 
@@ -56,6 +56,7 @@ class GitHubClient:
         with logging_context(repo=repo, number=number, action="assign_issue"):
             logger.info("Assigned issue", extra={"context": {"assignees": assignees}})
 
+@asynccontextmanager
 async def with_client(token: str) -> GitHubClient:
     client = GitHubClient(token=token)
     try:

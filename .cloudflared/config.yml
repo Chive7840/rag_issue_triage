@@ -1,7 +1,0 @@
-tunnel: 5a68bf98-4e55-4f23-a15a-11ecd05e5c83
-credentials-file: /path/to/5a68bf98-4e55-4f23-a15a-11ecd05e5c83.json
-
-ingress:
-  - hostname: dev.example.com
-    service: http://localhost:5173
-  - service: http_status:404

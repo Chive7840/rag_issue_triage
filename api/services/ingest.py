@@ -9,7 +9,7 @@ import asyncpg
 
 from ..schemas import IssuePayload
 
-from logging_utils import get_logger, logging_context
+from api.utils.logging_utils import get_logger, logging_context
 
 logger = get_logger("api.services.ingest")
 

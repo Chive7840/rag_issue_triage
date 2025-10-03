@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Header, Request, status
 
 from ..schemas import HealthResponse
 from ..services import ingest
-from logging_utils import get_logger, logging_context
+from api.utils.logging_utils import get_logger, logging_context
 
 logger = get_logger("api.webhooks.jira")
 

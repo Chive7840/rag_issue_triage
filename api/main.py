@@ -18,7 +18,7 @@ from .schemas import ProposalApproval, SearchResponse, TriageProposal, TriageReq
 from .services import embeddings, retrieve, rerank, triage
 from .webhooks import github as github_webhooks
 from .webhooks import jira as jira_webhooks
-from logging_utils import get_logger, logging_context, setup_logging
+from api.utils.logging_utils import get_logger, logging_context, setup_logging
 
 setup_logging()
 logger = get_logger("api.main")

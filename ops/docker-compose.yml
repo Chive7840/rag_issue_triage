@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:15
+    image: postgres
     environment:
       POSTGRES_DB: triage
       POSTGRES_USER: postgres
@@ -65,16 +65,16 @@ services:
         condition: service_started
 
   cloudflared:
-    profiles: ['cloudflared']
+    profiles: [ 'cloudflared' ]
     image: cloudflare/cloudflared:2024.2.1
     env_file: ../.env
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     command: >-
-      if [ -z "$CLOUDFLARE_TUNNEL_TOKEN" ]; then
-        echo 'CLOUDFLARE_TUNNEL_TOKEN is not set. Generate a Cloudflare Zero Trust tunnel token and add it to .env before enabling the cloudflared profile.' >&2;
+      if [ -z "$${CLOUDFLARE_TUNNEL_TOKEN}" ]; then
+        echo 'CLOUDFLARE_TUNNEL_TOKEN is not set inside the cloudflared container. Verify .env loading or pass --env-file.' >&2;
         exit 1;
       fi;
-      cloudflared tunnel --no-autoupdate run --token "$CLOUDFLARE_TUNNEL_TOKEN"
+      cloudflared tunnel --no-autoupdate run --token "$${CLOUDFLARE_TUNNEL_TOKEN}"
     depends_on:
       api:
         condition: service_started
