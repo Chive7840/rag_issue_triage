@@ -29,6 +29,7 @@ This repository demos a Retrieval-Augmented Generation (RAG) copilot that triage
 - `POST /triage/approve` applies labels/comments/assignees to GitHub or Jira issues via official REST endpoints.
 
 ### Worker
+
 The Redis worker consumes `triage:embed` jobs, computes SentenceTransformer embeddings, upserts them into `issue_vectors`, and refreshes the `similar` table for quick neighbor lookups.
 
 ### Evaluation
@@ -58,7 +59,9 @@ See `db/init.sql` for the full schema. This includes the generated text search v
 
 ## Running Locally
 
-1. Copy `.env.example` to `.env` and set secrets (`GITHUB_WEBHOOK_SECRET`, `GITHUB_TOKEN`, `JIRA_*`).
+1. Copy `.env.example` to `.env` and set secrets (`GITHUB_WEBHOOK_SECRET`, `GITHUB_TOKEN`,
+                                                  `CLOUDFLARE_TUNNEL_TOKEN`,`JIRA_*`).
+   - Use Cloudflare Zero Trust to create a tunnel that maps to `http://api:8000` and copy the generated token into `.env`.
 2. Launch the stack:
    ```bash
    cd ops
@@ -69,6 +72,7 @@ See `db/init.sql` for the full schema. This includes the generated text search v
    - `api`: FastAPI server on http://localhost:8000
    - `worker`: Redis consumer that populates embeddings
    - `web`: React dashboard on http://localhost:5173
+   - `Cloudflared`: Cloudflare tunnel exposing the FastAPI webhooks over HTTPS
    - `postgres`, `redis`: backing services
   
 3. Seed historical issues by enqueuing jobs:

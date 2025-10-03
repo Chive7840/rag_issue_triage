@@ -12,4 +12,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ENV PYTHONPATH=/app
 
-CMD ["python", "worker/worker.py]
+CMD ["python", "worker/worker.py"]
