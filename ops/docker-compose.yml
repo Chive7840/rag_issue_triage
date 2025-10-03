@@ -64,5 +64,20 @@ services:
       api:
         condition: service_started
 
+  cloudflared:
+    profiles: ['cloudflared']
+    image: cloudflare/cloudflared:2024.2.1
+    env_file: ../.env
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      if [ -z "$CLOUDFLARE_TUNNEL_TOKEN" ]; then
+        echo 'CLOUDFLARE_TUNNEL_TOKEN is not set. Generate a Cloudflare Zero Trust tunnel token and add it to .env before enabling the cloudflared profile.' >&2;
+        exit 1;
+      fi;
+      cloudflared tunnel --no-autoupdate run --token "$CLOUDFLARE_TUNNEL_TOKEN"
+    depends_on:
+      api:
+        condition: service_started
+
 volumes:
   pgdata:

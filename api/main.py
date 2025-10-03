@@ -2,15 +2,14 @@
 from __future__ import annotations
 
 import json
-
 import os
+from contextlib import asynccontextmanager
 from typing import Any
 
 import asyncpg
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 from redis import asyncio as aioredis
 
 from .clients.github import GitHubClient
@@ -24,19 +23,21 @@ from logging_utils import get_logger, logging_context, setup_logging
 setup_logging()
 logger = get_logger("api.main")
 
+
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> None:
+async def lifespan(app: FastAPI):
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
-        logger.error(f"Error type: {RuntimeError}")
         raise RuntimeError("DATABASE_URL is required")
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
     with logging_context(component="api", event="startup"):
         logger.info("Initializing API dependencies")
-    app.include_router()    # placeholder for github_webhooks
-    app.include_router()    # placeholder for jira_webhooks
-    app.state.db_pool = await asyncpg.create_pool(dsn=database_url)
-    app.state.redis = aioredis.from_url(redis_url, encoding="utf-8", decode_response=True)
+    db_pool = await asyncpg.create_pool(dsn=database_url)
+    redis = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+
+    app.state.db_pool = db_pool
+    app.state.redis = redis
+    app.state.cloudflare_tunnel_token = os.getenv("CLOUDFLARE_TUNNEL_TOKEN", "")
     app.state.github_webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET", "")
     app.state.jira_webhook_secret = os.getenv("JIRA_WEBHOOK_SECRET", "")
     app.state.github_token = os.getenv("GITHUB_TOKEN", "")
@@ -45,11 +46,18 @@ async def lifespan(app: FastAPI) -> None:
     app.state.jira_token = os.getenv("JIRA_API_TOKEN", "")
     app.state.json_loads = json.loads
 
-    yield
-    await app.state.db_pool.close()
-    await app.state.redis.close()
+    try:
+        yield
+    finally:
+        with logging_context(component="api", event="shutdown"):
+            logger.info("Shutting down API dependencies")
+        await app.state.db_pool.close()
+        await app.state.redis.close()
+
 
 app = FastAPI(title="RAG issue Triage Copilot", lifespan=lifespan)
+app.include_router(github_webhooks.router)
+app.include_router(jira_webhooks.router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,12 +71,14 @@ app.add_middleware(
 async def get_db_pool(request: Request) -> asyncpg.Pool:
     return request.app.state.db_pool
 
+
 @app.get("/healthz")
 async def healthcheck(request: Request) -> dict[str, Any]:
     pool: asyncpg.Pool = request.app.stater.db_pool
     async with pool.acquire() as conn:
         await conn.execute("SELECT 1")
     return {"status": "ok"}
+
 
 @app.get("/search", response_model=SearchResponse)
 async def search(
@@ -93,7 +103,6 @@ async def search(
 async def propose_triage(
         payload: TriageRequest,
         pool: asyncpg.Pool = Depends(get_db_pool),
-
 ) -> TriageProposal:
     async with pool.acquire() as conn:
         record = await conn.fetchrow(
@@ -127,6 +136,7 @@ async def propose_triage(
         logger.info("Proposal generated")
         return proposal
 
+
 @app.post("/triage/approve")
 async def approve_triage(
         payload: ProposalApproval,
@@ -135,7 +145,7 @@ async def approve_triage(
     async with pool.acquire() as conn:
         record = await conn.fetchrow(
             "SELECT source, repo, project, external_key, raw_json FROM issues WHERE id = $1",
-            payload.issue_id
+            payload.issue_id,
         )
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="issue not found")

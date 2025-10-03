@@ -8,7 +8,7 @@ import os
 import asyncpg
 from redis import asyncio as aioredis
 
-from ..api.services import embeddings
+from api.services import embeddings
 from logging_utils import bind_context, clear_context, get_logger, logging_context, setup_logging
 
 setup_logging()
