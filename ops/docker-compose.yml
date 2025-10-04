@@ -28,7 +28,7 @@ services:
       dockerfile: ops/Dockerfile.api
     env_file: ../.env
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5433/triage
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/triage
       REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
@@ -44,7 +44,7 @@ services:
       dockerfile: ops/Dockerfile.worker
     env_file: ../.env
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5433/triage
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/triage
       REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:

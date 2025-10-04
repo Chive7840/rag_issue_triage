@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from scipy.stats import trim1
 
 from api.schemas import RetrievalResult, TriageProposal
 from api.services import triage
@@ -41,6 +40,6 @@ async def test_propose_returns_triage_payload(monkeypatch):
     proposal = await triage.propose(pool, issue_id=99, embedding=embedding, reranker=reranker, top_k=3)
 
     assert isinstance(proposal, TriageProposal)
-    assert proposal.labels == ["needs-triage"]
+    assert list(proposal.labels) == ["needs-triage"]
     assert proposal.similar[0].issue_id == 11
     assert reranker.calls and reranker.calls[0][0] == "issue_triage"

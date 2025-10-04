@@ -1,6 +1,6 @@
 # RAG Issue Triage Copilot Starter
 
-This repository provides a production-ready starter for a Retrieval-Augmented Generation (RAG) copilot that triages GitHub and Jira issues. The implementation mirrors the ingestion, retrieval, webhook, and evaluation patterns from:
+This a Retrieval-Augmented Generation (RAG) copilot that triages GitHub and Jira issues. The implementation mirrors the ingestion, retrieval, webhook, and evaluation patterns from:
 
 - [GitHub Issues RAG cookbook](https://huggingface.co/blog/github-issues-rag) for ingest → embed → retrieve pipelines.
 - [pgvector similarity search guides](https://www.tigergraph.com/blog/build-rag-applications-with-postgres-pgvector/) for HNSW/IVF index configuration and hybrid SQL retrieval.
@@ -120,3 +120,13 @@ The GitHub Actions workflow installs dependencies, compiles Python modules, and 
 - Implement backfill scripts for GitHub repos and Jira JQL queries following the GitHub issues RAG cookbook.
 - Swap `NoOpReranker` for a cross-encoder reranker via Hugging Face Inference endpoints or on-prem models.
 - Extend the React dashboard with authentication and richer triage analytics as you evolve beyond this starter.
+
+## Portfolio Sandbox Blueprint
+
+Add functionality to Sandbox the program without live data from GitHub or Jira -> see the [containerized portfolio sandbox plan](docs/containerized_sandbox_plan.md). The blueprint covers:
+
+- A Docker Compose topology that mirrors production services while remaining self-contained.
+- Modern base images and dependency management approaches that avoid deprecated runtimes.
+- Synthetic GitHub and Jira datasets with deterministic seeding for repeatable demos.
+- Automation for database initialization, embedding warm-up, and observability.
+- Portfolio polish, including walkthrough assets and reset scripts.
