@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatcling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rag-issue-triage"
+version = "0.1.0"
+description = "RAG-powered issue triage services for GitHub and Jira data."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+authors = [{name = "Portfolio Sandbox"}]
+dependencies = [
+    "fastapi==0.118.0",
+    "uvicorn[standard]==0.37.0",
+    "asyncpg==0.30.0",
+    "redis[hiredis]==6.4.0",
+    "httpx==0.28.1",
+    "python-dotenv==1.1.1",
+    "sentence-transformers==5.1.1",
+    "numpy==2.3.3",
+    "pandas==2.3.3",
+    "scikit-learn==1.7.2",
+    "SQLAlchemy==2.0.43",
+    "pydantic==2.11.9"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest==8.4.2",
+    "pytest-httpx==0.35.0"
+]
+
+[tool.uv.pip]
+no-build-isolation = false
+python = "python3

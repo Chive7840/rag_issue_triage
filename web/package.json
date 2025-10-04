@@ -14,20 +14,21 @@
     "type": "git",
     "url": "https://github.com/Chive7840/rag_issue_triage.git"
   },
+  "packageManager": "pnpm@9.15.2",
   "private": true,
   "devDependencies": {
-    "@types/react": "^18.2.37",
-    "@types/react-dom": "^18.2.15",
-    "@vitejs/plugin-react": "^4.2.1",
-    "typescript": "^5.3.3",
-    "vite": "^7.1.7"
+    "@types/react": "^18.3.25",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.25.0",
-    "axios": "^1.6.7",
+    "@tanstack/react-query": "^5.90.2",
+    "axios": "^1.12.2",
     "express": "^5.1.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.0"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.1"
   }
 }
