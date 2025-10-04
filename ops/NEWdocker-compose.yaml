@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: triage
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../db/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    ports:
+      - '5433:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: ops/containers/api.Dockerfile
+    env_file:
+      - ../.env.sandbox
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '8000:8000'
+
+  worker:
+    build:
+      context: ..
+      dockerfile: ops/containers/worker.Dockerfile
+    env_file:
+      - ../.env.sandbox
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: ops/containers/web.Dockerfile
+    ports:
+      - '4173:4173'
+    depends_on:
+      api:
+        condition: service_started
+
+  cloudflared:
+    profiles: [ 'cloudflared' ]
+    image: cloudflare/cloudflared:2024.2.1
+    env_file:
+      - ../.env.sandbox
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: >-
+      if [ -z "$${CLOUDFLARE_TUNNEL_TOKEN}" ]; then
+        echo 'CLOUDFLARE_TUNNEL_TOKEN is not set inside the cloudflared container. Verify .env loading or pass --env-file.' >&2;
+        exit 1;
+      fi;
+      cloudflared tunnel --no-autoupdate run --token "$${CLOUDFLARE_TUNNEL_TOKEN}"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  pgdata:
