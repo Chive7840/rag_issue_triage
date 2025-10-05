@@ -4,6 +4,7 @@ The portfolio sandbox needs expressive fixtures (labels, comments, events, dupli
 The generation logic is deterministic so the committed dataset can be recreated exactly when the script is executed.
 To scale the payload up or down while keeping the template coverage use the ``--multiplier``.
 """
+
 from __future__ import annotations
 
 import argparse
