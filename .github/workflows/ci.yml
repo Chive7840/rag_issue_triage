@@ -35,6 +35,8 @@ jobs:
       - name: static checks
         run: |
           python -m compileall api worker eval
+      - name: Validate sandbox compose
+        run: docker compose -f ops/docker-compose.sandbox.yml config
       - name: API unit smoke
         run: |
           uvicorn api.main:app --help

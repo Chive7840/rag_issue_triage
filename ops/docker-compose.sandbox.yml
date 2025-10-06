@@ -24,6 +24,20 @@ services:
       timeout: 5s
       retries: 5
 
+  bootstrap:
+    build:
+      context: ..
+      dockerfile: ops/containers/api.Dockerfile
+    env_file:
+      - ../.env.sandbox
+    environment:
+      SANDBOX_DATA_DIR: /app/db/synth_data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "api.sandbox.bootstrap", "bootstrap", "--data-dir", "/app/db/synth_data"]
+    restart: "no"
+
   api:
     build:
       context: ..
@@ -32,10 +46,11 @@ services:
       - ../.env.sandbox
     depends_on:
       postgres:
-
         condition: service_healthy
       redis:
         condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
     ports:
       - '8000:8000'
 
@@ -45,37 +60,25 @@ services:
       dockerfile: ops/containers/worker.Dockerfile
     env_file:
       - ../.env.sandbox
+    environment:
+      SANDBOX_DATA_DIR: /app/db/synth_data
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
 
   web:
     build:
       context: ..
       dockerfile: ops/containers/web.Dockerfile
+    depends_on:
+      api:
+        condition: service_started
     ports:
       - '4173:4173'
-    depends_on:
-      api:
-        condition: service_started
-
-  cloudflared:
-    profiles: [ 'cloudflared' ]
-    image: cloudflare/cloudflared:2024.2.1
-    env_file:
-      - ../.env.sandbox
-    entrypoint: [ "/bin/sh", "-c" ]
-    command: >-
-      if [ -z "$${CLOUDFLARE_TUNNEL_TOKEN}" ]; then
-        echo 'CLOUDFLARE_TUNNEL_TOKEN is not set inside the cloudflared container. Verify .env loading or pass --env-file.' >&2;
-        exit 1;
-      fi;
-      cloudflared tunnel --no-autoupdate run --token "$${CLOUDFLARE_TUNNEL_TOKEN}"
-    depends_on:
-      api:
-        condition: service_started
 
 volumes:
   pgdata:
