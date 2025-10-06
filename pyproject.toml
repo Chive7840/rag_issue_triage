@@ -32,4 +32,4 @@ test = [
 
 [tool.uv.pip]
 no-build-isolation = false
-python = "python3
+python = "python3"
