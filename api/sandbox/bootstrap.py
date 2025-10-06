@@ -276,3 +276,69 @@ class CommandResult:
     exit_code: int = 0
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Sandbox bootstrap utilities")
+    parser.add_argument(
+        "--database-url",
+        default=os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL),
+        help="PostgreSQL connection string",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    data_cmd = sub.add_parser("load-data", help="Load sandbox issues into the database")
+    data_cmd.add_argument("--data-dir", default=str(DEFAULT_DATA_DIR))
+    data_cmd.add_argument("--force", action="store_true", help="Truncate tables before loading data")
+
+    embed_cmd = sub.add_parser("load-embeddings", help="Compute embeddings for sandbox issues")
+    embed_cmd.add_argument("--model", default=embeddings.DEFAULT_MODEL)
+    embed_cmd.add_argument("--batch-size", type=int, default=32)
+    embed_cmd.add_argument("--force", action="store_true", help="Recompute embeddings even if present")
+
+    boot_cmd = sub.add_parser("bootstrap", help="Load data and embeddings in a single command")
+    boot_cmd.add_argument("--data-dir", default=str(DEFAULT_DATA_DIR))
+    boot_cmd.add_argument("--model", default=embeddings.DEFAULT_MODEL)
+    boot_cmd.add_argument("--batch-size", type=int, default=32)
+    boot_cmd.add_argument("--force", action="store_true", help="Force reload of data and embeddings")
+
+    return parser
+
+
+async def _dispatch(args: argparse.Namespace) -> CommandResult:
+    pool = await asyncpg.create_pool(dsn=args.database_url)
+    try:
+        if args.command == "load-data":
+            await ensure_sample_data(pool, data_dir=Path(args.data_dir), force=args.force)
+        elif args.command == "load-embeddings":
+            await ensure_embeddings(
+                pool,
+                model=args.model,
+                batch_size=args.batch_size,
+                force=args.force,
+            )
+        elif args.command == "bootstrap":
+            await ensure_sample_data(pool, data_dir=Path(args.data_dir), force=args.force)
+            await ensure_embeddings(
+                pool,
+                model=args.model,
+                batch_size=args.batch_size,
+                force=True if args.force else False,
+            )
+        else:
+            return CommandResult(exit_code=1)
+        return CommandResult(exit_code=0)
+    finally:
+        await pool.close()
+
+
+def run_cli(argv: Sequence[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    try:
+        result = asyncio.run(_dispatch(args))
+    except KeyboardInterrupt:
+        return 130
+    return result.exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_cli())
