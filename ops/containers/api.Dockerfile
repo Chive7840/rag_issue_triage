@@ -39,6 +39,10 @@ COPY eval ./eval
 COPY db ./db
 COPY pyproject.toml uv.lock ./
 
+RUN mkdir -p ./db/synth_data \
+    && python ./api/services/generate_deterministic_sample.py --flavor github -n 750 --seed demo-42 --days 30 -o ./db/synth_data/github_issues.ndjson.gz \
+    && python ./api/services/generate_deterministic_sample.py --flavor jira   -n 750  --seed demo-42 --days 30 -o ./db/synth_data/jira_issues.ndjson.gz
+
 EXPOSE 8000
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
