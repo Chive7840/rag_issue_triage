@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -15,6 +16,7 @@ from redis import asyncio as aioredis
 from .clients.github import GitHubClient
 from .clients.jira import JiraClient
 from .schemas import ProposalApproval, SearchResponse, TriageProposal, TriageRequest
+from . import sandbox
 from .services import embeddings, retrieve, rerank, triage
 from .webhooks import github as github_webhooks
 from .webhooks import jira as jira_webhooks
@@ -45,6 +47,16 @@ async def lifespan(app: FastAPI):
     app.state.jira_email = os.getenv("JIRA_EMAIL", "")
     app.state.jira_token = os.getenv("JIRA_API_TOKEN", "")
     app.state.json_loads = json.loads
+    sandbox_enabled = os.getenv("SANDBOX_BOOTSTRAP", "1").lower() not in {"0", "false", "no"}
+    if sandbox_enabled:
+        data_dir_raw = os.getenv("SANDBOX_DATA_DIR")
+        data_dir = Path(data_dir_raw) if data_dir_raw else sandbox.DEFAULT_DATA_DIR
+        with logging_context(component="api", event="sandbox_bootstrap", data_dir=str(data_dir)):
+            try:
+                await sandbox.ensure_sample_data(db_pool, data_dir=data_dir)
+                await sandbox.ensure_embeddings(db_pool)
+            except Exception:
+                logger.exception("Failed to boostrap sandbox data")
 
     try:
         yield

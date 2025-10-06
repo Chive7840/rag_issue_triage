@@ -11,15 +11,14 @@ Usage example -- GitHub:
 Usage example -- Jira:
 ``python generate_deterministic_sample.py --flavor jira   -n 750  --seed demo-42 --days 30 -o ../../db/sandbox/jira_issues.ndjson``
 
-To compress the data when supply arguments, add `.gz` after `.ndjson` at the end of each command.
+    Optional:
+        Add `.gz` after `.ndjson` at the end of each command to compress the data.
 """
 
 from __future__ import annotations
 import argparse, gzip, json, math, os, random, sys
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
-
-from sympy.integrals.intpoly import point_sort
 
 # ----------- github repo name generator -----------
 orgs = ["hirokawa", "tanaka", "aoyama", "nishinoen", "yoshida", "nagisa",
