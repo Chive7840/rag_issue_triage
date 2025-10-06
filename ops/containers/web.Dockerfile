@@ -9,7 +9,7 @@ ENV PNPM_HOME=/root/.local/share/pnpm \
 RUN corepack enable && corepack prepare pnpm@9.15.2 --activate
 
 WORKDIR /app
-COPY web/pnpm-lock.yaml web/package.json \
+COPY web/pnpm-lock.yaml web/package.json ./
 RUN pnpm fetch
 COPY web/ ./
 RUN pnpm install --frozen-lockfile --offline

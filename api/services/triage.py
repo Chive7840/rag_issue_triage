@@ -5,6 +5,7 @@ import asyncpg
 import numpy as np
 
 from ..schemas import TriageProposal
+from . import embeddings
 from .retrieve import vector_search
 from api.utils.logging_utils import get_logger, logging_context
 
@@ -16,10 +17,12 @@ async def propose(
         embedding: np.ndarray,
         reranker,
         top_k: int = 5,
+        *,
+        model_name: str = embeddings.DEFAULT_MODEL,
 ) -> TriageProposal:
-    with logging_context(issue_id=issue_id, top_k=top_k):
+    with logging_context(issue_id=issue_id, top_k=top_k, model=model_name):
         logger.info("Generating proposal from neighbors")
-        neighbors = await vector_search(pool, embedding, limit=top_k)
+        neighbors = await vector_search(pool, embedding, limit=top_k, model=model_name)
         reranked = await reranker.rerank("issue_triage", neighbors)
         logger.info("Proposal assembled", extra={"context": {"neighbor_count": len(reranked)}})
     labels = ["needs-triage"]

@@ -6,6 +6,7 @@ import json
 import os
 
 import asyncpg
+import numpy as np
 from redis import asyncio as aioredis
 
 from api.services import embeddings
@@ -34,15 +35,15 @@ async def process_job(pool: asyncpg.Pool, job: dict[str, object]) -> None:
                     return
             logger.info("Computing embedding")
             vector = embeddings.embedding_for_issue(record["title"], record["body"])
-            vector_list = vector.tolist()
+            vector_list = np.asarray(vector, dtype=np.float32, copy=False).tolist()
             await conn.execute(
                 """
-                INSERT INTO issue_vectors (issue_id, embedding, model, updpate_at)
-                VALUES ($1, $2, $2, NOW())
+                INSERT INTO issue_vectors (issue_id, embedding, model, updpated_at)
+                VALUES ($1, $2, $3, NOW())
                 ON CONFLICT (issue_id) DO UPDATE SET
                     embedding = EXCLUDED.embedding,
                     model = EXCLUDED.model,
-                    update_at = NOW()
+                    updated_at = NOW()
                 """,
                 issue_id,
                 vector_list,
@@ -76,7 +77,7 @@ async def worker() -> None:
     if not database_url:
         raise RuntimeError("DATABASE_URL is required")
     pool = await asyncpg.create_pool(dsn=database_url)
-    redis = aioredis.from_url(redis_url, encoding="utf-8", decode_response=True)
+    redis = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
     try:
         while True:
             _, raw = await redis.blpop("triage:embed")
@@ -89,7 +90,7 @@ async def worker() -> None:
                 with logging_context(raw_job=raw):
                     logger.exception("Failed to process job")
     finally:
-        await redis.close()
+        await redis.aclose()
         await pool.close()
 
 

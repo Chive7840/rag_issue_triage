@@ -1,3 +1,8 @@
+name: rag-issue-triage
+
+x-app-env: &app-env
+  - ../.env.sandbox
+
 services:
   postgres:
     image: postgres:16
@@ -28,11 +33,10 @@ services:
     build:
       context: ..
       dockerfile: ops/containers/api.Dockerfile
-    env_file:
-      - ../.env.sandbox
+      target: api
+    env_file: *app-env
     depends_on:
       postgres:
-
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -43,8 +47,8 @@ services:
     build:
       context: ..
       dockerfile: ops/containers/worker.Dockerfile
-    env_file:
-      - ../.env.sandbox
+      target: worker
+    env_file: *app-env
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,8 +68,7 @@ services:
   cloudflared:
     profiles: [ 'cloudflared' ]
     image: cloudflare/cloudflared:2024.2.1
-    env_file:
-      - ../.env.sandbox
+    env_file: *app-env
     entrypoint: [ "/bin/sh", "-c" ]
     command: >-
       if [ -z "$${CLOUDFLARE_TUNNEL_TOKEN}" ]; then

@@ -16,7 +16,7 @@ COPY pyproject.toml uv.lock ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv export --frozen --format requirements.txt --output-file requirements.lock --no-emit-project \
-    && uv pip install --system --requirements requirements.lock --no-cache-dir \
+    && uv pip install --system --requirement requirements.lock --no-cache-dir \
     && rm requirements.lock
 
 FROM python:3.12-slim AS worker

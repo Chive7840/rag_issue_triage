@@ -14,7 +14,7 @@ logger = get_logger("api.services.embeddings")
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 @lru_cache(maxsize=1)
-def get_model(model_name : str = DEFAULT_MODEL) -> SentenceTransformer:
+def get_model(model_name: str = DEFAULT_MODEL) -> SentenceTransformer:
     with logging_context(component="embeddings", model=model_name):
         logger.info("Loading embedding model")
     return SentenceTransformer(model_name)
@@ -29,9 +29,9 @@ def encode_texts(texts: Iterable[str], model_name: str = DEFAULT_MODEL) -> np.nd
         list(items),
         convert_to_numpy=True,
         show_progress_bar=True,
-        normalize_embeddings=True
+        normalize_embeddings=True,
     )
-    return np.asarray(embeddings, dtype=np.float32)
+    return np.asarray(embeddings, dtype=np.float32, copy=False)
 
 
 def embedding_for_issue(title: str, body: str, model_name: str = DEFAULT_MODEL) -> np.ndarray:
