@@ -27,6 +27,7 @@ DATA_FILES = {
 
 DEFAULT_DATA_DIR = Path(__file__).resolve().parents[2] / "db" / "sandbox"
 DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/triage"
+INIT_SQL_PATH = Path(__file__).resolve().parents[2] / "db" / "init.sql"
 
 def _resolve_dataset_path(path: Path) -> Path | None:
     if path.exists():
@@ -118,7 +119,7 @@ async def _upsert_issue(conn: asyncpg.Connection, payload: IssuePayload) -> int:
         INSERT INTO issues (
             source,
             external_key,
-            tile,
+            title,
             body,
             repo,
             project,
@@ -141,6 +142,7 @@ async def _upsert_issue(conn: asyncpg.Connection, payload: IssuePayload) -> int:
         payload.external_key,
         payload.title,
         payload.body,
+        payload.repo,
         payload.project,
         payload.status,
         payload.created_at,
@@ -159,6 +161,19 @@ async def _replace_labels(conn: asyncpg.Connection, issue_id: int, labels: Itera
         "INSERT INTO labels (issue_id, label, source) VALUES ($1, $2, $3)",
         [(issue_id, label, source) for label in cleaned],
     )
+
+async def _ensure_schema(pool: asyncpg.Pool) -> None:
+    async with pool.acquire() as conn:
+        exists = await conn.fetchval("SELECT to_regclass('public.issues')")
+        if exists:
+            return
+        if not INIT_SQL_PATH.exists():
+            raise FileNotFoundError(f"Database schema file not found at {INIT_SQL_PATH}")
+        logger.info("Applying sandbox database schema", extra={"context": {"path": str(INIT_SQL_PATH)}})
+        script = INIT_SQL_PATH.read_text(encoding="utf-8")
+        statements = [chunk.strip() for chunk in script.split(";") if chunk.strip()]
+        for statement in statements:
+            await conn.execute(statement)
 
 
 async def ensure_sample_data(
@@ -306,6 +321,7 @@ def _build_parser() -> argparse.ArgumentParser:
 async def _dispatch(args: argparse.Namespace) -> CommandResult:
     pool = await asyncpg.create_pool(dsn=args.database_url)
     try:
+        await _ensure_schema(pool)
         if args.command == "load-data":
             await ensure_sample_data(pool, data_dir=Path(args.data_dir), force=args.force)
         elif args.command == "load-embeddings":
