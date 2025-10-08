@@ -51,7 +51,7 @@ async def process_job(pool: asyncpg.Pool, job: dict[str, object]) -> None:
             )
             await conn.execute(
                 """
-                INSERT INTO similar (issue_id, neighbor_id, score, ts)
+                INSERT INTO similar_issues (issue_id, neighbor_id, score, ts)
                 SELECT $1, n.id, n.score, NOW()
                 FROM (
                     SELECT i.id, 1 - (iv.embedding <-> $2) AS score

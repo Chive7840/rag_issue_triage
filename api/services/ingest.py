@@ -16,6 +16,10 @@ logger = get_logger("api.services.ingest")
 async def store_issue(pool: asyncpg.Pool, issue: IssuePayload) -> int:
     """Insert or update an issue row and return its primary key."""
 
+    created_at = issue.created_at
+    if isinstance(created_at, datetime) and created_at.tzinfo is not None:
+        created_at = created_at.astimezone(UTC).replace(tzinfo=None)
+
     async with pool.acquire() as conn:
         record = await conn.fetchrow(
             """
@@ -27,6 +31,7 @@ async def store_issue(pool: asyncpg.Pool, issue: IssuePayload) -> int:
                 repo = EXCLUDED.repo,
                 project = EXCLUDED.project,
                 status = EXCLUDED.status,
+                created_at = EXCLUDED.created_at,
                 raw_json = EXCLUDED.raw_json
             RETURNING id
             """,
@@ -36,8 +41,8 @@ async def store_issue(pool: asyncpg.Pool, issue: IssuePayload) -> int:
             issue.body,
             issue.project,
             issue.status,
-            issue.created_at,
-            issue.raw_json,
+            created_at,
+            json.dumps(issue.raw_json, ensure_ascii=False),
         )
     if record is None:
         raise RuntimeError("Failed to upsert issue payload")

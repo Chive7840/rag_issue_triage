@@ -128,6 +128,10 @@ def _make_payload(record: dict[str, object], *, flavor: str) -> IssuePayload:
 
 
 async def _upsert_issue(conn: asyncpg.Connection, payload: IssuePayload) -> int:
+    created_at = payload.created_at
+    if isinstance(created_at, datetime) and created_at.tzinfo is not None:
+        created_at = created_at.astimezone(timezone.utc).replace(tzinfo=None)
+
     record = await conn.fetchrow(
         """
         INSERT INTO issues (
@@ -159,8 +163,8 @@ async def _upsert_issue(conn: asyncpg.Connection, payload: IssuePayload) -> int:
         payload.repo,
         payload.project,
         payload.status,
-        payload.created_at,
-        payload.raw_json,
+        created_at,
+        json.dumps(payload.raw_json, ensure_ascii=False),
     )
     if record is None:
         raise RuntimeError("Failed to upsert issue payload")

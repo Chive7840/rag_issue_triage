@@ -52,7 +52,7 @@ async def test_process_job_inserts_embeddings(monkeypatch):
     await worker_module.process_job(pool, {"issue_id": 5, "force": False})
 
     assert any("INSERT INTO issue_vectors" in call[0] for call in conn.execute_calls)
-    assert any("INSERT INTO similar" in call[0] for call in conn.execute_calls)
+    assert any("INSERT INTO similar_issues" in call[0] for call in conn.execute_calls)
 
 @pytest.mark.asyncio
 async def test_process_job_skips_when_issue_missing(monkeypatch):

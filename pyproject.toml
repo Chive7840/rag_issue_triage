@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatcling>=1.25.0"]
+requires = ["hatchling>=1.25.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,7 +7,7 @@ name = "rag-issue-triage"
 version = "0.1.0"
 description = "RAG-powered issue triage services for GitHub and Jira data."
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.11,<3.13"
 authors = [{name = "Portfolio Sandbox"}]
 dependencies = [
     "fastapi==0.118.0",
@@ -27,7 +27,9 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest==8.4.2",
-    "pytest-httpx==0.35.0"
+    "pytest-httpx==0.35.0",
+    "pytest.asyncio==0.23.8",
+    "pytest-mock==3.14.0"
 ]
 
 [tool.uv.pip]

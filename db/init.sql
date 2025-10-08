@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS labels (
     ts TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS similar (
+CREATE TABLE IF NOT EXISTS similar_issues (
     issue_id INT REFERENCES issues(id) ON DELETE CASCADE,
     neighbor_id INT NOT NULL,
     score REAL NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS similar (
 );
 
 -- HNSW index for pgvector embeddings per pgvector docs
-CREATE INDEX IF NOT EXISTS issue_vectors_embegging_hnsw ON issue_vectors
+CREATE INDEX IF NOT EXISTS issue_vectors_embedding_hnsw ON issue_vectors
 USING hnsw (embedding vector_l2_ops)
 WITH (m = 16, ef_construction = 200);
 
