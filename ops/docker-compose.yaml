@@ -1,6 +1,14 @@
+name: rag-issue-triage
+
+x-app-env: &app-env
+  - ../.env.sandbox
+
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
+    build:
+      context: ..
+      dockerfile: ops/containers/postgres.Dockerfile
     environment:
       POSTGRES_DB: triage
       POSTGRES_USER: postgres
@@ -9,7 +17,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ../db/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
     ports:
-      - '5433:5432'
+      - '5432:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 10s
@@ -28,11 +36,10 @@ services:
     build:
       context: ..
       dockerfile: ops/containers/api.Dockerfile
-    env_file:
-      - ../.env.sandbox
+      target: api
+    env_file: *app-env
     depends_on:
       postgres:
-
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -43,8 +50,8 @@ services:
     build:
       context: ..
       dockerfile: ops/containers/worker.Dockerfile
-    env_file:
-      - ../.env.sandbox
+      target: worker
+    env_file: *app-env
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,8 +71,7 @@ services:
   cloudflared:
     profiles: [ 'cloudflared' ]
     image: cloudflare/cloudflared:2024.2.1
-    env_file:
-      - ../.env.sandbox
+    env_file: *app-env
     entrypoint: [ "/bin/sh", "-c" ]
     command: >-
       if [ -z "$${CLOUDFLARE_TUNNEL_TOKEN}" ]; then

@@ -136,8 +136,8 @@ async def hybrid_search(
                 vector,
                 limit,
                 query,
-                model,
                 alpha,
+                model,
             )
         logger.info("Hybrid search completed", extra={"context": {"row_count": len(rows)}})
     results: list[RetrievalResult] = []

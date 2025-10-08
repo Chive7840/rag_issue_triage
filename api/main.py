@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
                 await sandbox.ensure_sample_data(db_pool, data_dir=data_dir)
                 await sandbox.ensure_embeddings(db_pool)
             except Exception:
-                logger.exception("Failed to boostrap sandbox data")
+                logger.exception("Failed to bootstrap sandbox data")
 
     try:
         yield
@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI):
         with logging_context(component="api", event="shutdown"):
             logger.info("Shutting down API dependencies")
         await app.state.db_pool.close()
-        await app.state.redis.close()
+        await app.state.redis.aclose()
 
 
 app = FastAPI(title="RAG issue Triage Copilot", lifespan=lifespan)
@@ -86,7 +86,7 @@ async def get_db_pool(request: Request) -> asyncpg.Pool:
 
 @app.get("/healthz")
 async def healthcheck(request: Request) -> dict[str, Any]:
-    pool: asyncpg.Pool = request.app.stater.db_pool
+    pool: asyncpg.Pool = request.app.state.db_pool
     async with pool.acquire() as conn:
         await conn.execute("SELECT 1")
     return {"status": "ok"}
@@ -196,7 +196,7 @@ async def approve_triage(
                 if payload.assignee:
                     await client.assign(key, payload.assignee)
                 if payload.comment:
-                    await client.add_comment(key, payload.commit)
+                    await client.add_comment(key, payload.comment)
         finally:
             await client.close()
     else:
