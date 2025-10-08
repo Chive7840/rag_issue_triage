@@ -1,6 +1,7 @@
 """Retrieval service backed by Postgres + pgvector."""
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Sequence
 
 import asyncpg
@@ -18,6 +19,20 @@ def _as_vector(embedding: np.ndarray | Iterable[float]) -> list[float]:
     if array.ndim != 1:
         array = array.reshape(-1)
     return array.tolist()
+
+
+def _vector_literal(vector: Sequence[float]) -> str:
+    """Serialize a vector for pgvector queries.
+
+    asyncpg does not automatically coerce Python sequences to the pgvector type,
+    so we emit the JSON representation that pgvector accepts, matching the
+    format used when persisting embeddings.
+
+    :param vector:
+    :return:
+    """
+
+    return json.dumps([float(component) for component in vector], ensure_ascii=False, separators=(",", ":"))
 
 
 def _resolve_url(row: asyncpg.Record) -> str | None:
@@ -57,6 +72,7 @@ async def vector_search(
         model: str = DEFAULT_MODEL,
 ) -> Sequence[RetrievalResult]:
     vector = _as_vector(embedding)
+    vector_param = _vector_literal(vector)
     with logging_context(strategy="vector", limit=limit, model=model):
         async with pool.acquire() as conn:
             rows = await conn.fetch(
@@ -76,6 +92,7 @@ async def vector_search(
                 LIMIT $3
                 """,
                 vector,
+                vector_param,
                 model,
                 limit,
             )
@@ -97,6 +114,7 @@ async def hybrid_search(
         model: str = DEFAULT_MODEL,
 ) -> Sequence[RetrievalResult]:
     vector = _as_vector(embedding)
+    vector_param = _vector_literal(vector)
     with logging_context(strategy="hybrid", limit=limit, model=model, alpha=alpha):
         async with pool.acquire() as conn:
             rows = await conn.fetch(
@@ -134,6 +152,7 @@ async def hybrid_search(
                 LIMIT $2
                 """,
                 vector,
+                vector_param,
                 limit,
                 query,
                 alpha,

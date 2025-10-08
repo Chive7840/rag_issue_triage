@@ -49,6 +49,8 @@ async def test_vector_search_returns_results_with_urls():
     results = await retrieve.vector_search(pool, embedding, limit=2, model="model")
 
     assert len(results) == 2
+    # The pgvector extension expects string literals rather than raw lists.
+    assert isinstance(pool.conn.fetch_calls[0][1][0], str)
     first = results[0]
     assert isinstance(first, RetrievalResult)
     assert str(first.url) == "https://github.com/org/repo/issues/1"
