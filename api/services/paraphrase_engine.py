@@ -116,12 +116,12 @@ class LockedEntityGuard:
     _ISSUE_KEY_PATTERN = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
     _ID_PATTERN = re.compile(r"\b(?:id:?\s*#?\d{3,}|#\d{3,}|\d{5,})\b", re.IGNORECASE)
     _TIMESTAMP_PATTERN = re.compile(
-        r"\b\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}:\d{2}(?:z|[+-]\d{2}:\d{2})?)?\b"
+        r"\b\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})?)?\b"
     )
     _VERSION_PATTERN = re.compile(r"\bv?\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?\b")
-    _ERROR_PATTERN = re.compile(r"\b[A-Z][A-za-z0-9]+Error\b")
+    _ERROR_PATTERN = re.compile(r"\b[A-Z][A-Za-z0-9]+Error\b")
     _STACK_TRACE_PATTERN = re.compile(
-        r"Traceback \(most recent call last\):[\s\S]+?(?=\n{2,}|\z)", re.MULTILINE
+        r"Traceback \(most recent call last\):[\s\S]+?(?=\n{2,}|\Z)", re.MULTILINE
     )
 
 
