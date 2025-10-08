@@ -153,3 +153,34 @@ Add functionality to Sandbox the program without live data from GitHub or Jira -
 - Synthetic GitHub and Jira datasets with deterministic seeding for repeatable demos.
 - Automation for database initialization, embedding warm-up, and observability.
 - Portfolio polish, including walkthrough assets and reset scripts.
+
+### Synthetic Data Strategy
+
+The deterministic issue generator under `api/services/generate_deterministic_sample.py` now supports Local paraphrasing
+so that synthetic records better reflect natural variations. The variations will not violate Lockable entities such as
+repo names, timestamps, or code blocks.
+
+- **Providers**
+  - `rule` (default): Lightweight synonym swaps, passive/active voice flips, and filler removal constrained by an edit budget.
+  - `hf_local`: optional Hugging Face `text2text-generation` pipeline that loads from an on-disk cache and stays offline at
+    runtime. Downloads are disabled unless explicitly permitted.
+- **Locked entities** – Repo/project identifiers, URLs, file paths, timestamps, versions, inline/fenced code, and stack traces
+  are masked before any provider runs to guarantee identical restoration afterwards.
+- **Budgets** – Set `--paraphrase-budget` (default 15 tokens) and the provider respects a 25% edit ceiling per section.
+- **Caching & offline requirement** – `hf_local` reads the model from `HF_CACHE_DIR` (defaults to `.cache/hf`). If the cache is
+  empty and downloads are disabled, the CLI raises a clear error so you can prime the cache ahead of time.
+- **CLI flags**
+   - `--paraphrase {off|rule|hf_local}` to select the provider.
+   - `--hf-model`, `--hf-cache`, and `--hf-allow-downloads` for Hugging Face overrides.
+   - `--seed` governs deterministic edits for both providers.
+
+Example commands:
+
+```bash
+# rule-based paraphrasing
+python -m api.services.generate_deterministic_sample --flavor github --count 200 --paraphrase rule
+
+# hf_local using cached t5-small (downloads allowed only for the priming run)
+PARAPHRASE_MODEL=t5-small HF_CACHE_DIR=.cache/hf \
+python -m api.services.generate_deterministic_sample --flavor jira --count 100 --paraphrase hf_local --hf-allow-downloads
+```
