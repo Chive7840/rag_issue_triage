@@ -1,0 +1,42 @@
+{
+  "synonyms" : {
+    "verbs": {
+     "fails": ["breaks", "errors"],
+     "crashes": ["stops", "faults"],
+     "hangs": ["stalls", "locks"],
+     "returns": ["yields", "sends"],
+     "observed": ["seen", "noticed"]
+    },
+    "qualifiers": {
+      "slightly": ["marginally", "lightly"],
+      "severely": ["critically", "badly"],
+      "unexpected": ["surprising", "unplanned"]
+    },
+    "severities": {
+      "critical": ["blocking", "severe"],
+      "high": ["major", "elevated"],
+      "low": ["minor", "reduced"]
+    }
+  },
+  "filler_phrases": [
+    "It seems that",
+    "We noticed that",
+    "Please note that",
+    "In other words",
+    "For reference"
+  ],
+  "voice_patterns": {
+    "passive_to_active": [
+      {
+        "pattern": "\\bwas (?P<verb>\\w+ed) by (?P<actor>[^\\.;\\n]+)",
+        "replacement": "{actor} {verb}"
+      }
+    ],
+    "active_to_passive": [
+      {
+        "pattern": "\\b(?P<actor>[A-Za-z0-9_ /-]+) (?P<verb>fails|crashes|blocks|breaks)",
+        "replacement": "was {verb} by {actor}"
+      }
+    ]
+  }
+}
