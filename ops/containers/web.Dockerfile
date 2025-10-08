@@ -18,5 +18,7 @@ RUN pnpm run build
 FROM caddy:2-alpine AS web
 WORKDIR /srv
 COPY --from=web-build /app/dist /usr/share/caddy
+COPY web/Caddyfile /etc/caddy/Caddyfile
 EXPOSE 4173
-CMD ["caddy", "file-server", "--root", "/usr/share/caddy", "--listen", ":4173"]
+
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]

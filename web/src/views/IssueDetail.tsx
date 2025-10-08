@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from 'axios';
 import { FormEvent, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import apiClient from '../apiClient';
 
 interface RetrievalResult {
     issue_id: number;
@@ -28,7 +28,7 @@ export default function IssueDetail() {
     const { data, isLoading } = useQuery({
         queryKey: ['proposal', issueId],
         queryFn: async () => {
-            const response = await axios.post('/triage/propose', { issue_id: issueId });
+            const response = await apiClient.post('/triage/propose', { issue_id: issueId });
             return response.data as Proposal;
         },
         enabled: Number.isFinite(issueId)
@@ -36,18 +36,18 @@ export default function IssueDetail() {
 
     const approveMutation = useMutation({
         mutationFn: async () => {
-            await axios.post('/triage/approve', {
+            await apiClient.post('/triage/approve', {
                 issue_id: issueId,
-                labels: labels ? labels.split(',').map((v) => v.trim()) : data?.labels ?? [],
+                labels: labels ? labels.split(',').map((value) => value.trim()) : data?.labels ?? [],
                 assignee: assignee || undefined,
                 comment: comment || undefined,
                 source: 'github'
             });
         },
-       onSuccess: () => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['proposal', issueId] }); //TODO: check if adding .then() matters
             setComment('');
-       }
+        }
     });
 
     if (isLoading || !data) {

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
 import { useState } from 'react';
+import apiClient from "../apiClient";
 
 interface SearchResult {
     issue_id: number;
@@ -14,8 +14,9 @@ export default function SearchView() {
     const { data, refetch, isFetching } = useQuery({
         queryKey: ['search', query],
         queryFn: async () => {
-            const response = await axios.get('/search',
-                { params: { q: query, k: 10, hybrid: true } });
+            const response = await apiClient.get('/search', {
+                params: { q: query, k: 10, hybrid: true }
+            });
             return response.data.results as SearchResult[];
         }
     });
@@ -28,20 +29,22 @@ export default function SearchView() {
                     event.preventDefault();
                     refetch();
                 }}
-                >
-                 <input value={query} onChange={(event) =>
-                     setQuery(event.target.value)} />
-                 <button type="submit" disabled={isFetching}>
-                     Search
-                 </button>
+            >
+                <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                />
+                <button type="submit" disabled={isFetching}>
+                    Search
+                </button>
             </form>
             <ul>
                 {data?.map((item) => (
                     <li key={item.issue_id}>
                         {item.url ? (
-                          <a href={item.url} target="_blank" rel="noreferrer">
-                              {item.title}
-                          </a>
+                            <a href={item.url} target="_blank" rel="noreferrer">
+                                {item.title}
+                            </a>
                         ) : (
                             item.title
                         )}
