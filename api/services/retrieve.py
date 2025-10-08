@@ -65,22 +65,13 @@ def _row_value(row: asyncpg.Record, key: str, default: object | None = None) -> 
 def _resolve_url(row: asyncpg.Record) -> str | None:
     """Best effort construction of an issue URL from a search row."""
 
-    def _get(key: str, default: object | None = None) -> object | None:
-        try:
-            return row.get(key, default)    # type: ignore[return-value]
-        except AttributeError:
-            try:
-                return row[key]
-            except (KeyError, TypeError):
-                return default
-
-    raw = _get("raw_json") or {}
+    raw = _row_value(row, "raw_json") or {}
     issue_payload = raw.get("issue") if isinstance(raw, dict) else None
     if isinstance(issue_payload, dict):
         html_url = (
-                issue_payload.get("html_url")
-                or issue_payload.get("url")
-                or issue_payload.get("self")
+            issue_payload.get("html_url")
+            or issue_payload.get("url")
+            or issue_payload.get("self")
         )
     elif isinstance(raw, dict):
         html_url = raw.get("html_url") or raw.get("self")
@@ -89,11 +80,11 @@ def _resolve_url(row: asyncpg.Record) -> str | None:
     if html_url:
         return html_url
 
-    source = (_get("source") or "").lower()
-    repo = _get("repo")
-    project = _get("project")
-    external_key = _get("external_key")
-    issue_id = _get("id")
+    source = str(_row_value(row, "source") or "").lower()
+    repo = _row_value(row, "repo")
+    project = _row_value(row, "project")
+    external_key = _row_value(row, "external_key")
+    issue_id = _row_value(row, "id")
 
     if source == "github" and repo and external_key:
         _, _, maybe_number = str(external_key).partition("#")
@@ -105,7 +96,7 @@ def _resolve_url(row: asyncpg.Record) -> str | None:
     if project:
         key = external_key or issue_id
         if key is not None:
-            return f"https://github.com/{repo}/issues/{issue_id}"
+            return f"https://{project}.atlassian.net/browse/{key}"
 
     if repo and str(issue_id).isdigit():
         return f"https://github.com/{repo}/issues/{issue_id}"
@@ -142,7 +133,7 @@ async def vector_search(
         FROM issue_vectors iv
         JOIN issues i ON i.id = iv.issue_id
         WHERE iv.model = $1
-        ORDER BY iv.embedding <-> '{vector_sql}'::vector
+        ORDER BY iv.embedding <-> {vector_sql}
         LIMIT $2
     """
     params: tuple[object, ...] = (model, limit)

@@ -12,6 +12,7 @@ import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from redis import asyncio as aioredis
+from torch.fx.experimental.migrate_gradual_types.constraint_generator import embedding_inference_rule
 
 from .clients.github import GitHubClient
 from .clients.jira import JiraClient
@@ -134,7 +135,20 @@ async def propose_triage(
             payload.issue_id,
         )
     if vector_record:
-        embedding = np.array(vector_record["embedding"], dtype=np.float32)
+        embedding_value = vector_record["embedding"]
+        if isinstance(embedding_value, str):
+            try:
+                embedding_value = json.loads(embedding_value)
+            except json.JSONDecodeError as exc:
+                logger.exception("FAiled to decode stored embedding as JSON")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="stored embedding is not valid JSON",
+                ) from exc
+        if isinstance(embedding_value, (bytes, bytearray, memoryview)):
+            embedding = np.frombuffer(embedding_value, dtype=np.float32).copy()
+        else:
+            embedding = np.array(embedding_value, dtype=np.float32)
         model_name = vector_record["model"]
     else:
         embedding = embeddings.embedding_for_issue(record["title"], record["body"])

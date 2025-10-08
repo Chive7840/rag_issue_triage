@@ -54,10 +54,10 @@ async def test_vector_search_returns_results_with_urls():
     assert params == ("model", 2)
     first = results[0]
     assert isinstance(first, RetrievalResult)
-    assert first.url == "https://github.com/org/repo/issues/1"
+    assert str(first.url) == "https://github.com/org/repo/issues/1"
     assert pytest.approx(first.score) == 0.8
     second = results[1]
-    assert second.url == "https://proj.atlassian.net/browse/2"
+    assert str(second.url) == "https://proj.atlassian.net/browse/2"
 
 @pytest.mark.asyncio
 async def test_hybrid_search_combines_scores():
@@ -81,5 +81,5 @@ async def test_hybrid_search_combines_scores():
     assert "::vector" in query_text
     assert params == (1, "bug", 0.75, "sentence-transformers/all-MiniLM-L6-v2")
     result = results[0]
-    assert result.url == "https://github.com/org/repo/issues/10"
+    assert str(result.url) == "https://github.com/org/repo/issues/10"
     assert pytest.approx(result.score) == pytest.approx(0.9 * 0.75 + 0.3 * 0.25)
