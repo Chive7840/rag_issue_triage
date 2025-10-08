@@ -69,7 +69,7 @@ def _parse_timestamp(raw: object) -> datetime:
         text = str(raw or "")
         if not text:
             return datetime.now(timezone.utc)
-        normalized = text.replace("z", "+00:00").replace("z", "+00:00")
+        normalized = text.replace("Z", "+00:00").replace("z", "+00:00")
         try:
             value = datetime.fromisoformat(normalized)
         except ValueError:
@@ -89,6 +89,31 @@ def _coerce_text(value: object) -> str:
 
 def _serialize_embedding(vector: Iterable[float]) -> str:
     return json.dumps([float(component) for component in vector], ensure_ascii=False, separators=(",",":"))
+
+
+async def _vector_column_dimension(
+        conn: asyncpg.Connection,
+        *,
+        table: str,
+        column: str,
+) -> int | None:
+    """Return the declared dimension for a pgvector column when available."""
+
+    atttypmod = await conn.fetchval(
+        """
+        SELECT atttypmod
+        FROM pg_attribute
+        WHERE attrelid = to_regclass($1)::oid
+          AND attname = $2
+          AND NOT attisdropped
+        """,
+        table,
+        column,
+    )
+    if atttypmod is None or atttypmod <= 4:
+        return None
+    # pgvector stores the typmod as dimension + VARHDRSZ (4).
+    return int(atttypmod)
 
 
 def _current_status(record: dict[str, object], *, flavor: str) -> str:
@@ -280,6 +305,7 @@ async def ensure_embeddings(
 
     await ensure_vector_extension(pool)
 
+    vector_dimension: int | None = None
     async with pool.acquire() as conn:
         total_issues = await conn.fetchval("SELECT COUNT(*) FROM issues")
         if not total_issues:
@@ -297,6 +323,24 @@ async def ensure_embeddings(
             if missing == 0 and await conn.fetchval("SELECT COUNT(*) FROM issue_vectors"):
                 logger.info("Embeddings already populated; skipping")
                 return 0
+        vector_dimension = await _vector_column_dimension(
+            conn,
+            table="issue_vectors",
+            column="embedding",
+        )
+
+    expected_dimension = embeddings.get_model(model).get_sentence_embedding_dimension()
+    if vector_dimension is not None and vector_dimension != expected_dimension:
+        raise RuntimeError(
+            "issue_vectors.embedding expects {declared} dimensions but the '{model}' model produces {actual}."
+            "Adjust the sandbox schema or use a compatible model.".format(
+                declared=vector_dimension,
+                model=model,
+                actual=expected_dimension,
+            )
+        )
+
+    async with pool.acquire() as conn:
         rows = await conn.fetch("SELECT id, title, body FROM issues ORDER BY id")
 
     processed = 0

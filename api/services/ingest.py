@@ -39,6 +39,7 @@ async def store_issue(pool: asyncpg.Pool, issue: IssuePayload) -> int:
             issue.external_key,
             issue.title,
             issue.body,
+            issue.repo,
             issue.project,
             issue.status,
             created_at,

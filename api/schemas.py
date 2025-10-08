@@ -1,7 +1,6 @@
 """Pydantic schemas for the Issue Triage Copilot API"""
 from __future__ import annotations
 
-from dataclasses import field
 from datetime import datetime
 from typing import Any, Optional, Sequence, Tuple
 
