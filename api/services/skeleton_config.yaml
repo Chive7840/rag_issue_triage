@@ -1,4 +1,5 @@
 {
+  "__comment": "Configuration backing the rule-based paraphraser. Extend cautiously to retain determinism.",
   "synonyms" : {
     "verbs": {
      "fails": ["breaks", "errors"],
