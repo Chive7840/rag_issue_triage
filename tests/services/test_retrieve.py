@@ -1,9 +1,7 @@
-import difflib
 from typing import Any
 
 import numpy as np
 import pytest
-from sympy.series.gruntz import compare
 
 from api.schemas import RetrievalResult
 from api.services import retrieve
@@ -49,14 +47,17 @@ async def test_vector_search_returns_results_with_urls():
     results = await retrieve.vector_search(pool, embedding, limit=2, model="model")
 
     assert len(results) == 2
-    # The pgvector extension expects string literals rather than raw lists.
-    assert isinstance(pool.conn.fetch_calls[0][1][0], str)
+    query_text, params = pool.conn.fetch_calls[0]
+    # The vector embedding is interpolated as a pgvector literal and no longer
+    # passed as a positional parameter.
+    assert "::vector" in query_text
+    assert params == ("model", 2)
     first = results[0]
     assert isinstance(first, RetrievalResult)
-    assert str(first.url) == "https://github.com/org/repo/issues/1"
+    assert first.url == "https://github.com/org/repo/issues/1"
     assert pytest.approx(first.score) == 0.8
     second = results[1]
-    assert str(second.url) == "https://proj.atlassian.net/browse/2"
+    assert second.url == "https://proj.atlassian.net/browse/2"
 
 @pytest.mark.asyncio
 async def test_hybrid_search_combines_scores():
@@ -76,6 +77,9 @@ async def test_hybrid_search_combines_scores():
     results = await retrieve.hybrid_search(pool, embedding, query="bug", limit=1, alpha=0.75)
 
     assert len(results) == 1
+    query_text, params = pool.conn.fetch_calls[0]
+    assert "::vector" in query_text
+    assert params == (1, "bug", 0.75, "sentence-transformers/all-MiniLM-L6-v2")
     result = results[0]
-    assert str(result.url) == "https://github.com/org/repo/issues/10"
+    assert result.url == "https://github.com/org/repo/issues/10"
     assert pytest.approx(result.score) == pytest.approx(0.9 * 0.75 + 0.3 * 0.25)

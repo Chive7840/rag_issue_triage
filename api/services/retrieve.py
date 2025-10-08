@@ -35,24 +35,77 @@ def _vector_literal(vector: Sequence[float]) -> str:
     return json.dumps([float(component) for component in vector], ensure_ascii=False, separators=(",", ":"))
 
 
+def _vector_sql_literal(vector: Sequence[float]) -> str:
+    """Return a SQL literal that casts the vector to the pgvector type."""
+
+    literal = _vector_literal(vector)
+    # json.dumps never produces single quotes, but double the character just in case
+    # to remain safe when interpolating into SQL.
+    escaped = literal.replace("'", "''")
+    return f"'{escaped}'::vector"
+
+
+def _row_value(row: asyncpg.Record, key: str, default: object | None = None) -> object | None:
+    """Return a value from an asyncpg.Record or plain mapping without KeyErrors."""
+
+    getter = getattr(row, "get", None)
+    if callable(getter):
+        try:
+            return getter(key, default)     # type: ignore[misc]
+        except TypeError:
+            # asyncpg.Record.get only accepts (key, default); if we passed
+            # incompatible defaults fall back to __getitem__.
+            pass
+    try:
+        return row[key]
+    except (KeyError, TypeError):
+        return default
+
+
 def _resolve_url(row: asyncpg.Record) -> str | None:
-    raw = row["raw_json"] or {}
-    issue_payload = raw.get("issue") if isinstance(raw,dict) else None
+    raw = _row_value(row, "raw_json") or {}
+    issue_payload = raw.get("issue") if isinstance(raw, dict) else None
     if isinstance(issue_payload, dict):
-        html_url = issue_payload.get("html_url") or issue_payload.get("url") or issue_payload.get("self")
+        html_url = (
+                issue_payload.get("html_url")
+                or issue_payload.get("url")
+                or issue_payload.get("self")
+        )
     elif isinstance(raw, dict):
         html_url = raw.get("html_url") or raw.get("self")
     else:
         html_url = None
     if html_url:
         return html_url
-    source = row["source"]
-    repo = row["repo"]
-    external_key = row["external_key"]
-    if source == "github" and repo and external_key:
-        _, _, maybe_number = external_key.partition("#")
-        if maybe_number.isdigit():
-            return f"https://github.com/{repo}/issues/{maybe_number}"
+
+    source = _row_value(row, "source")
+    repo = _row_value(row, "repo")
+    external_key = _row_value(row, "external_key")
+    if source == "github" and isinstance(repo, str):
+        issue_number: str | None = None
+        if isinstance(external_key, str):
+            _, _, maybe_number = external_key.partition("#")
+            if maybe_number.isdigit():
+                issue_number = maybe_number
+        if issue_number is None:
+            issue_id = _row_value(row, "id")
+            if isinstance(issue_id, int):
+                issue_number = str(issue_id)
+        if issue_number:
+            return f"https://github.com/{repo}/issues/{issue_number}"
+
+    project = _row_value(row, "project")
+    if isinstance(project, str):
+        issue_key = None
+        if isinstance(external_key, str) and external_key:
+            issue_key = external_key
+        else:
+            issue_id = _row_value(row, "id")
+            if issue_id is not None:
+                issue_key = f"{issue_id}"
+        if issue_key:
+            return f"https://{project}.atlassian.net/browse/{issue_key}"
+
     return None
 
 
@@ -72,30 +125,26 @@ async def vector_search(
         model: str = DEFAULT_MODEL,
 ) -> Sequence[RetrievalResult]:
     vector = _as_vector(embedding)
-    vector_param = _vector_literal(vector)
+    vector_sql = _vector_sql_literal(vector)
+    query = f"""
+        SELECT i.id,
+               i.title,
+               i.source,
+               i.external_key,
+               i.repo,
+               i.project,
+               i.raw_json,
+               iv.embedding <-> {vector_sql} AS distance
+        FROM issue_vectors iv
+        JOIN issues i ON i.id = iv.issue_id
+        WHERE iv.model = $1
+        ORDER BY iv.embedding <-> {vector_sql}
+        LIMIT $2
+    """
+    params: tuple[object, ...] = (model, limit)
     with logging_context(strategy="vector", limit=limit, model=model):
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT i.id,
-                       i.title,
-                       i.source,
-                       i.external_key,
-                       i.repo,
-                       i.project,
-                       i.raw_json,
-                       iv.embedding <-> $1 AS distance
-                FROM issue_vectors iv
-                JOIN issues i ON i.id = iv.issue_id
-                WHERE iv.model = $2
-                ORDER BY iv.embedding <-> $1
-                LIMIT $3
-                """,
-                vector,
-                vector_param,
-                model,
-                limit,
-            )
+            rows = await conn.fetch(query, *params)
         logger.info("vector search completed", extra={"context": {"row_count": len(rows)}})
     results: list[RetrievalResult] = []
     for row in rows:
@@ -114,50 +163,44 @@ async def hybrid_search(
         model: str = DEFAULT_MODEL,
 ) -> Sequence[RetrievalResult]:
     vector = _as_vector(embedding)
-    vector_param = _vector_literal(vector)
+    vector_sql = _vector_sql_literal(vector)
+    query_text = f"""
+        WITH vector_candidates AS (
+            SELECT iv.issue_id,
+                   1 / (1 + (iv.embedding <-> {vector_sql})) AS vector_score
+            FROM issue_vectors iv
+            WHERE iv.model = $4
+            ORDER BY iv.embedding <-> {vector_sql}
+            LIMIT $1
+        ),
+        text_candidates AS (
+            SELECT i.id,
+                   ts_rank_cd(search_vector, plainto_tsquery('english', $2)) AS text_score
+            FROM issues i
+            WHERE search_vector @@ plainto_tsquery('english', $2)
+            ORDER BY text_score DESC
+            LIMIT $1
+        )
+        SELECT i.id,
+               i.title,
+               i.source,
+               i.external_key,
+               i.repo,
+               i.project,
+               i.raw_json,
+               COALESCE(vc.vector_score, 0) AS vector_score,
+               COALESCE(tc.text_score, 0) AS text_score
+        FROM issues i
+        LEFT JOIN vector_candidates vc ON vc.issue_id = i.id
+        LEFT JOIN text_candidates tc on tc.id = i.id
+        WHERE vc.issue_id IS NOT NULL OR tc.id IS NOT NULL
+        ORDER BY (COALESCE(vc.vector_score, 0) * $3 + COALESCE(tc.text_score, 0) * (1 - $3)) DESC
+        LIMIT $1
+    """
+    params: tuple[object, ...] = (limit, query, alpha, model)
     with logging_context(strategy="hybrid", limit=limit, model=model, alpha=alpha):
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                WITH vector_candidates AS (
-                    SELECT iv.issue_id,
-                           1 / (1 + (iv.embedding <-> $1)) AS vector_score
-                    FROM issue_vectors iv
-                    WHERE iv.model = $5
-                    ORDER BY iv.embedding <-> $1
-                    LIMIT $2
-                ),
-                text_candidates AS (
-                    SELECT i.id,
-                           ts_rank_cd(search_vector, plainto_tsquery('english', $3)) AS text_score
-                    FROM issues i
-                    WHERE search_vector @@ plainto_tsquery('english', $3)
-                    ORDER BY text_score DESC
-                    LIMIT $2
-                )
-                SELECT i.id,
-                       i.title,
-                       i.source,
-                       i.external_key,
-                       i.repo,
-                       i.project,
-                       i.raw_json,
-                       COALESCE(vc.vector_score, 0) AS vector_score,
-                       COALESCE(tc.text_score, 0) AS text_score
-                FROM issues i
-                LEFT JOIN vector_candidates vc ON vc.issue_id = i.id
-                LEFT JOIN text_candidates tc on tc.id = i.id
-                WHERE vc.issue_id IS NOT NULL OR tc.id IS NOT NULL
-                ORDER BY (COALESCE(vc.vector_score, 0) * $4 + COALESCE(tc.text_score, 0) * (1 - $4)) DESC
-                LIMIT $2
-                """,
-                vector,
-                vector_param,
-                limit,
-                query,
-                alpha,
-                model,
-            )
+            rows = await conn.fetch(query_text, *params)
         logger.info("Hybrid search completed", extra={"context": {"row_count": len(rows)}})
     results: list[RetrievalResult] = []
     for row in rows:
