@@ -79,6 +79,18 @@ def _parse_timestamp(raw: object) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def _coerce_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _serialize_embedding(vector: Iterable[float]) -> str:
+    return json.dumps([float(component) for component in vector], ensure_ascii=False, separators=(",",":"))
+
+
 def _current_status(record: dict[str, object], *, flavor: str) -> str:
     transitions = record.get("transitions") if isinstance(record, dict) else None
     if isinstance(transitions, list) and transitions:
@@ -94,8 +106,8 @@ def _current_status(record: dict[str, object], *, flavor: str) -> str:
 
 def _make_payload(record: dict[str, object], *, flavor: str) -> IssuePayload:
     created_at = _parse_timestamp(record.get("createdAt")) if isinstance(record, dict) else datetime.now(timezone.utc)
-    title = record.get("title", "") if isinstance(record, dict) else ""
-    body = record.get("body", "") if isinstance(record, dict) else ""
+    title = _coerce_text(record.get("title") if isinstance(record, dict) else "")
+    body = _coerce_text(record.get("body") if isinstance(record, dict) else "")
     if flavor == "github":
         repo = record.get("repo") if isinstance(record, dict) else None
         number = record.get("number") if isinstance(record, dict) else None
@@ -171,7 +183,11 @@ async def _upsert_issue(conn: asyncpg.Connection, payload: IssuePayload) -> int:
     return int(record["id"])
 
 async def _replace_labels(conn: asyncpg.Connection, issue_id: int, labels: Iterable[object], source: str) -> None:
-    cleaned = [str(label).strip() for label in labels if isinstance(label, str) and label.strip()]
+    cleaned: list[str] = []
+    for label in labels:
+        text = _coerce_text(label).strip()
+        if text:
+            cleaned.append(text)
     await conn.execute("DELETE FROM labels WHERE issue_id = $1", issue_id)
     if not cleaned:
         return
@@ -285,11 +301,14 @@ async def ensure_embeddings(
 
     processed = 0
     for chunk in _chunk(rows, batch_size):
-        texts = [f"{row['title']}\n\n{row['body']}".strip() for row in chunk]
+        texts = [f"{_coerce_text(row['title'])}\n\n{_coerce_text(row['body'])}".strip() for row in chunk]
         vectors = embeddings.encode_texts(texts, model_name=model)
+        if len(vectors) != len(chunk):
+            raise RuntimeError("Embedding count mismatch during sandbox bootstrap")
         async with pool.acquire() as conn:
             async with conn.transaction():
                 for row, vector in zip(chunk, vectors):
+                    embedding_arg = _serialize_embedding(vector)
                     await conn.execute(
                         """
                         INSERT INTO issue_vectors (issue_id, embedding, model, updated_at)
@@ -300,7 +319,7 @@ async def ensure_embeddings(
                             updated_at = NOW()
                         """,
                         row["id"],
-                        vector.tolist(),
+                        embedding_arg,
                         model,
                     )
         processed += len(chunk)
