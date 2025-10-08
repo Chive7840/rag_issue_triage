@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
                 await sandbox.ensure_sample_data(db_pool, data_dir=data_dir)
                 await sandbox.ensure_embeddings(db_pool)
             except Exception:
-                logger.exception("Failed to boostrap sandbox data")
+                logger.exception("Failed to bootstrap sandbox data")
 
     try:
         yield

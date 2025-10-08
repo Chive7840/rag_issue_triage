@@ -5,12 +5,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:   # pragma: no cover - import for type checking only
-    from .bootstrap import DEFAULT_DATA_DIR, ensure_embeddings, ensure_sample_data, run_cli
+    from .bootstrap import (
+        DEFAULT_DATA_DIR,
+        ensure_embeddings,
+        ensure_sample_data,
+        ensure_vector_extension,
+        run_cli
+    )
 
 __all__ = [
     "DEFAULT_DATA_DIR",
     "ensure_embeddings",
     "ensure_sample_data",
+    "ensure_vector_extension",
     "run_cli",
 ]
 

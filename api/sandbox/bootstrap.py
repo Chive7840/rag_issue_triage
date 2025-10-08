@@ -29,6 +29,20 @@ DEFAULT_DATA_DIR = Path(__file__).resolve().parents[2] / "db" / "sandbox"
 DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/triage"
 INIT_SQL_PATH = Path(__file__).resolve().parents[2] / "db" / "init.sql"
 
+async def ensure_vector_extension(pool: asyncpg.Pool) -> None:
+    """Ensure the pgvector extension is available in the sandbox database."""
+
+    async with pool.acquire() as conn:
+        exists = await conn.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')"
+        )
+        if exists:
+            return
+
+        logger.info("Enabling pgvector extension in sandbox database")
+        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
+
 def _resolve_dataset_path(path: Path) -> Path | None:
     if path.exists():
         return path
@@ -184,6 +198,8 @@ async def ensure_sample_data(
 ) -> int:
     """Load sandbox issues when the database is empty."""
 
+    await ensure_vector_extension(pool)
+
     base_dir = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
     if not base_dir.exists():
         logger.warning("Sandbox data directory not found", extra={"context": {"path": str(base_dir)}})
@@ -241,6 +257,8 @@ async def ensure_embeddings(
         force: bool = False,
 ) -> int:
     """Compute embeddings for all issues if they are missing."""
+
+    await ensure_vector_extension(pool)
 
     async with pool.acquire() as conn:
         total_issues = await conn.fetchval("SELECT COUNT(*) FROM issues")

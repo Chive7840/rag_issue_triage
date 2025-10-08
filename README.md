@@ -111,6 +111,29 @@ See `db/init.sql` for the full schema, including the generated text search vecto
 
 6. Approve AI proposals from the dashboard, which relays labels/comments through the GitHub and Jira REST clients.
 
+### Resetting the sandbox
+
+Use the helper script under `ops/scripts` whenever you need to clear a 
+service's containers, images, or persistent data. This is especially handy if 
+schema changes make the existing Postgres volume incompatible with the latest
+bootstrapping logic.
+
+```bash
+# Drop the Postgres container and remove its pgdata volume
+python ops/scripts/reset_sandbox.py --services postgres
+```
+
+# Reset every service and prune the built images so the next `docker compose up`
+# performs clean rebuilds
+python ops/scripts/reset_sandbox.py --all --prune-images
+
+# Keep the postgres volume but remove the API/worker images
+python ops/scripts/reset_sandbox.py --services api worker --prune-images --keep-volume
+
+Provide `--project-name` if you run Compose with a custom project Label; the 
+script otherwise auto-detects the sandbox project name from the Compose
+configuration.
+
 ## CI/CD
 
 The GitHub Actions workflow installs dependencies, compiles Python modules, and runs an API smoke check against uvicorn to ensure the app boots under CI with Postgres + Redis services.

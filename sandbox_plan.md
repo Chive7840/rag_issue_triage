@@ -92,10 +92,12 @@ The sandbox ships deterministic GitHub and Jira payloads that mirror common work
    - Structured logging via `api.utils.logging_utils` is enabled by default.
    - Optional Cloudflare tunneling runs behind the `cloudflared` profile for remote demos.
 
-6. **Reset workflow (manual today)**
-   - Run `docker compose -f ops/docker-compose.sandbox.yml down --volumes` when you need a clean slate. This drops the active `pgdata16` volume so Postgres re-initializes with version 16–compatible files.
-   - If you booted the sandbox prior to the Postgres 16 upgrade, remove the legacy volume once via `docker volume rm rag_issue_triage_pgdata` so it does not linger as dead weight.
-   - A dedicated reset script will be added during the documentation/polish phase.
+6. **Reset tooling**:
+   - Ship a management script (`ops/scripts/reset_sandbox.py`) that drops and recreates the database plus embeddings so reviewers can restore the initial state quickly.
+
+7. **Reset workflow**
+   - Use `python ops/scripts/reset_sandbox.py --services postgres` to stop the container and clear the `pgdata` volume whenever schema changes land.
+   - Pass `--all --prune-images` to rebuild every service from scratch if Docker cache state becomes inconsistent.
 
 ## 6. Portfolio Presentation Enhancements
 
