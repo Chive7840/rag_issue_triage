@@ -22,8 +22,9 @@ router = APIRouter(prefix="/api", tags=["viewer"])
 async def get_db_pool(request: Request) -> asyncpg.Pool:
     pool = getattr(request.app.state, "db_pool", None)
     if pool is None:
-        raise RuntimeError("Database pool is not configured on the application side")
+        raise RuntimeError("Database pool is not configured on the application state")
     return pool
+
 
 @router.get("/routes", response_model=list[IssueRoute])
 async def get_routes(pool: asyncpg.Pool = Depends(get_db_pool)) -> list[IssueRoute]:
@@ -31,7 +32,7 @@ async def get_routes(pool: asyncpg.Pool = Depends(get_db_pool)) -> list[IssueRou
     return [IssueRoute(route=route) for route in routes]
 
 
-@router.get("/issues/by-route/{rout:path}", response_model=IssueViewerRecord)
+@router.get("/issues/by-route/{route:path}", response_model=IssueViewerRecord)
 async def get_issue_by_route(
         route: str,
         pool: asyncpg.Pool = Depends(get_db_pool),
@@ -58,7 +59,7 @@ async def search_issues(
         label: list[str] | None = Query(default=None),
         state: list[str] | None = Query(default=None),
         priority: list[str] | None = Query(default=None),
-        limit: int = Query(default=5, ge=1, le=200),
+        limit: int = Query(default=50, ge=1, le=200),
 ) -> IssueSearchResponse:
     filters: dict[str, Any] = {
         "q": q,
