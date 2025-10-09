@@ -424,7 +424,7 @@ class HFLocalParaphraser(LLMParaphraser):
         """Initialize the pipeline while respecting offline requirements."""
 
         super().__init__(paraphrase_budget=paraphrase_budget, max_edits_ratio=max_edits_ratio)
-        self.model_name = model_name or os.getenv("PARAPHRASE_MODEL", "ts-small")
+        self.model_name = model_name or os.getenv("PARAPHRASE_MODEL", "t5-small")
         cache_env = os.getenv("HF_CACHE_DIR", str(cache_dir) if cache_dir else ".cache/hf")
         self.cache_dir = Path(cache_dir or cache_env)
         if not cache_dir and not os.getenv("HF_CACHE_DIR"):
@@ -436,22 +436,21 @@ class HFLocalParaphraser(LLMParaphraser):
         self.seed = seed
         self.max_new_tokens = 48
         try:
-            from transformers import pipeline   # type: ignore
+            from transformers import (
+                AutoModelForSeq2SeqLM,
+                AutoTokenizer,
+                pipeline,
+            )
         except ImportError as exc:  # pragma: no cover - dependency guard
             raise RuntimeError("transformers is required for hf_local paraphrasing") from exc
 
-        pipe_kwargs = {
-            "model": self.model_name,
-            "tokenizer": self.model_name,
+        model_kwargs = {
             "cache_dir": str(self.cache_dir),
             "local_files_only": not self.allow_downloads,
-            "task": "text2text-generation",
         }
         try:
-            self._pipeline = pipeline(device_map="auto", **pipe_kwargs) # type: ignore[arg-type]
-        except TypeError:
-            pipe_kwargs.pop("task", None)
-            self._pipeline = pipeline("text2text-generation", device_map="auto", **pipe_kwargs)
+            model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name, **model_kwargs)
+            tokenizer = AutoTokenizer.from_pretrained(self.model_name, **model_kwargs)
         except OSError as err:
             if not self.allow_downloads:
                 raise RuntimeError(
@@ -459,6 +458,17 @@ class HFLocalParaphraser(LLMParaphraser):
                     "Allow downloads with --hf-allow-downloads to fetch it once."
                 ) from err
             raise
+        pipe_kwargs = {
+            "task": "text2text-generation",
+            "model": model,
+            "tokenizer": tokenizer,
+            "device_map": "auto",
+        }
+        try:
+            self._pipeline = pipeline(**pipe_kwargs)    # type: ignore[arg-type]
+        except TypeError:
+            pipe_kwargs.pop("task", None)
+            self._pipeline = pipeline("text2text-generation", **pipe_kwargs)
         except Exception as err:    # pragma: no cover - fallback
             raise RuntimeError(f"Failed to initialize paraphrase model: {err}") from err
         try:

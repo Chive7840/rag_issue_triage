@@ -395,7 +395,7 @@ def main():
         default=15,
         help="Maximum token edits allowed per section during paraphrasing.",
     )
-    default_model = os.getenv("PARAPHRASE_MODEL", "ts-small")
+    default_model = os.getenv("PARAPHRASE_MODEL", "t5-small")
     default_cache = os.getenv("HF_CACHE_DIR", ".cache/hf")
     default_allow = os.getenv("HF_ALLOW_DOWNLOADS", "").lower() in {"1", "true", "yes"}
     p.add_argument(
