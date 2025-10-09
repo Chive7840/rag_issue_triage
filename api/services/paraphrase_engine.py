@@ -1,6 +1,6 @@
 """Utilities for protecting locked entities and paraphrasing issue text.
 
-This module powers to paraphrasing strategies:
+This module powers two paraphrasing strategies:
 
 * :class:`RuleBasedParaphraser` applies deterministic edits (synonym swaps,
 sentence shuffles, filler removal) under a strict budget.
@@ -21,7 +21,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 ReplacementList = List[Tuple[str, str]]
 
@@ -390,10 +390,10 @@ class LLMParaphraser(BaseParaphraser, ABC):
         super().__init__(paraphrase_budget=paraphrase_budget, max_edits_ratio=max_edits_ratio)
 
     @abstractmethod
-    def generate(self, text: str, constraints: Optional[str], seed: str) -> str:
+    def generate(self, text: str, constraints: Optional[Dict[str, Any]], seed: str) -> str:
         """Produce a paraphrased candidate for ``text``."""
 
-    def paraphrase(self, text: str, constraints: Optional[dict] = None, seed: str = "") -> ParaphraseResult:
+    def paraphrase(self, text: str, constraints: Optional[Dict[str, Any]] = None, seed: str = "") -> ParaphraseResult:
         """Delegate to :meth:`generate` while enforcing the edit budget."""
 
         tokens = _tokenize(text)
@@ -490,7 +490,7 @@ class HFLocalParaphraser(LLMParaphraser):
             restored = restored.replace(placeholder, value)
         return restored
 
-    def generate(self, text: str, constraints: Optional[dict], seed: str) -> str:
+    def generate(self, text: str, constraints: Optional[Dict[str, Any]], seed: str) -> str:
         """Generate a paraphrase through the local pipeline and unmask spans."""
 
         safe_text, spans = self._apply_constraints(text, constraints or{})

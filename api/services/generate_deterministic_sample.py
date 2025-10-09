@@ -21,12 +21,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from sympy.physics.secondquant import contraction
-
 from api.services.paraphrase_engine import (
     BaseParaphraser,
     LockedEntityGuard,
-    LLMParaphraser,
     ProviderRegistry,
 )
 
@@ -201,17 +198,22 @@ def title_from_tpl(rng: random.Random, tpl: str, lex: Dict[str, List[str]]) -> s
 def body_md(rng: random.Random, lex: Dict[str, List[str]], env: str) -> str:
     """Assemble a mini-markdown body referencing environment ``env``."""
 
-    s1, s2 = rng.choice(lex["steps"]), rng.choice(lex["steps"])
+    step_1, step_2 = rng.sample(lex["steps"], k=2)
     expected = "200 OK" if rng.random() < 0.5 else "success toast"
-    got = "504 Gateway Timeout" if rng.random() < 0.5 else "TypeError: undefined"
+    observed = "504 Gateway Timeout" if rng.random() < 0.5 else "TypeError: undefined"
     return "\n".join([
         "### Environment",
         f"- {env}",
         "",
         "### Steps to Reproduce",
+        f"- {step_1}",
+        f"- {step_2}",
+        "",
+        "### Expected",
         f"- {expected}",
+        "",
         "### Actual",
-        f"- {got}",
+        f"- {observed}",
     ])
 
 
