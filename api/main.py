@@ -12,7 +12,6 @@ import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from redis import asyncio as aioredis
-from torch.fx.experimental.migrate_gradual_types.constraint_generator import embedding_inference_rule
 
 from .clients.github import GitHubClient
 from .clients.jira import JiraClient
@@ -21,6 +20,7 @@ from . import sandbox
 from .services import embeddings, retrieve, rerank, triage
 from .webhooks import github as github_webhooks
 from .webhooks import jira as jira_webhooks
+from .http import viewer as viewer_http
 from api.utils.logging_utils import get_logger, logging_context, setup_logging
 
 setup_logging()
@@ -71,6 +71,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="RAG issue Triage Copilot", lifespan=lifespan)
 app.include_router(github_webhooks.router)
 app.include_router(jira_webhooks.router)
+app.include_router(viewer_http.router)
 
 app.add_middleware(
     CORSMiddleware,
