@@ -171,7 +171,7 @@ repo names, timestamps, or code blocks.
   empty and downloads are disabled, the CLI raises a clear error so you can prime the cache ahead of time.
 - **CLI flags**
    - `--paraphrase {off|rule|hf_local}` to select the provider.
-   - `--hf-model`, `--hf-cache`, and `--hf-allow-downloads` for Hugging Face overrides.
+   - `--hf-model`, `--hf-cache`, `--hf-device`, and `--hf-allow-downloads` for Hugging Face overrides.
    - `--seed` governs deterministic edits for both providers.
 
 Example commands:
@@ -180,7 +180,7 @@ Example commands:
 # rule-based paraphrasing
 python -m api.services.generate_deterministic_sample --flavor github --count 200 --paraphrase rule
 
-# hf_local using cached t5-small (downloads allowed only for the priming run)
-PARAPHRASE_MODEL=t5-small HF_CACHE_DIR=.cache/hf \
-python -m api.services.generate_deterministic_sample --flavor jira --count 100 --paraphrase hf_local --hf-allow-downloads
+# hf_local using cached t5-small on GPU 0 (downloads allowed only for the priming run)
+PARAPHRASE_MODEL=t5-small HF_CACHE_DIR=.cache/hf HF_DEVICE=cuda:0 \
+python -m api.services.generate_deterministic_sample --flavor jira --count 100 --paraphrase hf_local --hf-device cuda:0 --hf-allow-downloads
 ```

@@ -14,18 +14,18 @@ restores them afterwards so downstream consumers see untouched protected spans.
 
 from __future__ import annotations
 
-import json
-import os
-import random
-import re
+import json, random, re, os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from api.utils.logging_utils import get_logger, logging_context
+
 ReplacementList = List[Tuple[str, str]]
 
 _CONFIG_CACHE: Optional[dict] = None
+logger = get_logger("api.services.paraphrase_engine")
 
 
 @dataclass
