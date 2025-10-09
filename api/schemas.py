@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Optional, Sequence, Tuple
-
+from dataclasses import field
 from pydantic import BaseModel, HttpUrl
 
 
@@ -59,3 +59,50 @@ class SearchResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     details: Optional[dict[str, Any]] = None
+
+
+class IssueRoute(BaseModel):
+    route: str
+
+
+class IssueViewerComment(BaseModel):
+    author: Optional[str] = None
+    body: str
+    body_html: str
+    created_at: Optional[datetime] = None
+
+
+class IssueViewerRecord(BaseModel):
+    id: int
+    source: str
+    route: str
+    origin_url: Optional[HttpUrl] = None
+    title: str
+    body: str
+    body_html: str
+    repo: Optional[str] = None
+    project: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    labels: list[str] = field(default_factory=list)
+    created_at: Optional[datetime] = None
+    determinism: str
+    comments: list[IssueViewerComment] = field(default_factory=list)
+
+
+class IssueSearchItem(BaseModel):
+    id: int
+    source: str
+    route: str
+    origin_url: Optional[HttpUrl] = None
+    title: str
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    labels: list[str] = field(default_factory=list)
+    repo: Optional[str] = None
+    project: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class IssueSearchResponse(BaseModel):
+    items: list[IssueSearchItem]
