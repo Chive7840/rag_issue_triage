@@ -4,7 +4,7 @@ export interface ViewerPluginHandle {
 }
 
 export interface ViewerPlugin {
-    id: string,
+    id: string;
     matches(pathname: string): boolean;
     mount(container: HTMLElement, initialPath: string): ViewerPluginHandle;
 }
@@ -12,7 +12,7 @@ export interface ViewerPlugin {
 type ActivePlugin = {
     plugin: ViewerPlugin;
     handle: ViewerPluginHandle;
-}
+};
 
 const registeredPlugins: ViewerPlugin[] = [];
 let initialized = false;
@@ -47,10 +47,11 @@ function hideHostApp(): void {
         return;
     }
     if (host.dataset.originSafeHidden === '1') {
-        originalDisplay = host.style.display || null;
-        host.style.display = 'none';
-        host.dataset.originSafeHidden = '1';
+        return;
     }
+    originalDisplay = host.style.display || null;
+    host.style.display = 'none';
+    host.dataset.originSafeHidden = '1';
 }
 
 function restoreHostApp(): void {
@@ -110,6 +111,7 @@ function ensureRouteObserver(): void {
         notifyRouteChange(window.location.pathname);
         return result;
     };
+
     history.replaceState = function replaceState(...args) {
         const result = originalReplaceState.apply(this, args as Parameters<typeof history.replaceState>);
         notifyRouteChange(window.location.pathname);
