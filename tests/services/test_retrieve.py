@@ -39,8 +39,26 @@ class FakePool:
 async def test_vector_search_returns_results_with_urls():
     embedding = np.array([0.1, 0.2, 0.3], dtype=np.float32)
     rows = [
-        {"id": 1, "title": "Bug", "repo": "org/repo", "project": None, "distance": 0.2},
-        {"id": 2, "title": "Task", "repo": None, "project": "proj", "distance": 0.5},
+        {
+            "id": 1,
+            "title": "Bug",
+            "repo": "org/repo",
+            "project": None,
+            "distance": 0.2,
+            "source": "github",
+            "external_key": "org/repo#1",
+            "raw_json": {},
+        },
+        {
+            "id": 2,
+            "title": "Task",
+            "repo": None,
+            "project": "proj",
+            "distance": 0.5,
+            "source": "jira",
+            "external_key": "JIRA-2",
+            "raw_json": {"site": "example"},
+        },
     ]
     pool = FakePool(rows)
 
@@ -54,9 +72,11 @@ async def test_vector_search_returns_results_with_urls():
     assert params == ("model", 2)
     first = results[0]
     assert isinstance(first, RetrievalResult)
+    assert first.route == "/gh/org/repo/issues/1"
     assert str(first.url) == "https://github.com/org/repo/issues/1"
     assert pytest.approx(first.score) == 0.8
     second = results[1]
+    assert second.route == "/jira/example/proj/JIRA-2"
     assert str(second.url) == "https://proj.atlassian.net/browse/2"
 
 @pytest.mark.asyncio
@@ -70,6 +90,9 @@ async def test_hybrid_search_combines_scores():
             "project": None,
             "vector_score": 0.9,
             "text_score": 0.3,
+            "source": "github",
+            "external_key": "org/repo#10",
+            "raw_json": {},
          }
     ]
     pool = FakePool(rows)
@@ -81,5 +104,6 @@ async def test_hybrid_search_combines_scores():
     assert "::vector" in query_text
     assert params == (1, "bug", 0.75, "sentence-transformers/all-MiniLM-L6-v2")
     result = results[0]
+    assert result.route == "/gh/org/repo/issues/10"
     assert str(result.url) == "https://github.com/org/repo/issues/10"
     assert pytest.approx(result.score) == pytest.approx(0.9 * 0.75 + 0.3 * 0.25)

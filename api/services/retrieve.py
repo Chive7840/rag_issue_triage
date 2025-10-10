@@ -114,10 +114,14 @@ def _resolve_url(row: asyncpg.Record) -> str | None:
 
 
 def _row_to_result(row: asyncpg.Record, score: float) -> RetrievalResult:
+    raw = _ensure_mapping(_row_value(row, "raw_json"))
+    route_info = _build_canonical_route(row, raw)
+    route = route_info["route"] if route_info else None
     return RetrievalResult(
         issue_id=row["id"],
         title=row["title"],
         score=score,
+        route=route,
         url=_resolve_url(row),
     )
 

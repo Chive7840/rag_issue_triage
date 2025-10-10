@@ -7,6 +7,7 @@ interface RetrievalResult {
     issue_id: number;
     title: string;
     score: number;
+    route?: string;
     url?: string;
 }
 
@@ -68,10 +69,22 @@ export default function IssueDetail() {
             <ul>
                 {data.similar.map((item) => (
                     <li key={item.issue_id}>
-                        {item.url ? (
-                            <a href={item.url} target="_blank" rel="noreferrer">
+                        {item.route || item.url ? (
+                            <button
+                                type="button"
+                                className="link-button"
+                                onClick={() => {
+                                    if (item.route) {
+                                        window.history.pushState({}, '', item.route);
+                                        return;
+                                    }
+                                    if (item.url) {
+                                        window.open(item.url, '_blank', 'noreferrer');
+                                    }
+                                }}
+                            >
                                 {item.title}
-                            </a>
+                            </button>
                         ) : (
                             item.title
                         )}

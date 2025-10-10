@@ -33,6 +33,7 @@ class RetrievalResult(BaseModel):
     title: str
     summary: Optional[str] = None
     score: float
+    route: Optional[str] = None
     url: Optional[HttpUrl] = None
 
 
