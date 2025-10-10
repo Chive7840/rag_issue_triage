@@ -434,6 +434,14 @@ async def _dispatch(args: argparse.Namespace) -> CommandResult:
 def run_cli(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if getattr(args, "command", None) is None:
+        args.command = "bootstrap"
+        # Mirror defaults from the bootstrap subcommand so invoking the module
+        # without arguments remains deterministic for local sandboxes
+        args.data_dir = str(DEFAULT_DATA_DIR)
+        args.model = embeddings.DEFAULT_MODEL
+        args.batch_size = 32
+        args.force = False
     try:
         result = asyncio.run(_dispatch(args))
     except KeyboardInterrupt:

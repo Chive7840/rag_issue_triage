@@ -130,9 +130,63 @@ python ops/scripts/reset_sandbox.py --all --prune-images
 # Keep the postgres volume but remove the API/worker images
 python ops/scripts/reset_sandbox.py --services api worker --prune-images --keep-volume
 
-Provide `--project-name` if you run Compose with a custom project Label; the 
+Provide `--project-name` if you run Compose with a custom project Label; the
 script otherwise auto-detects the sandbox project name from the Compose
 configuration.
+
+### Origin-safe issue viewer quickstart
+
+After rebuilding the container images you need to rebuild the web bundle and
+restart the API so the origin-safe viewer plugin mounts correctly.
+
+1. Install the Python application dependencies (editable installs now work out
+   of the box):
+
+   ```bash
+   pip install -e .[test]
+   ```
+
+2. Ensure the sandbox dataset is present. The API automatically performs this
+   step on startup, but you can run the bootstrap script manually if you are
+   unsure whether the database was seeded:
+
+   ```bash
+   python -m api.sandbox.bootstrap
+   ```
+
+3. Start the API (adjust the bind address as needed for Docker or VS Code
+   tunnels):
+
+   ```bash
+   uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+4. Reinstall web dependencies and rebuild the bundle so `app/register-plugins.ts`
+   is compiled alongside the existing dashboard:
+
+   ```bash
+   cd web
+   npm install
+   npm run build   # or npm run dev for the Vite dev server
+   ```
+
+5. Visit any canonical route such as
+   `http://localhost:5173/gh/rag-sandbox/sample-repo/issues/1`. The viewer will
+   hide the host dashboard only for `/gh/...` and `/jira/...` routes and will
+   render the deterministic banner, disabled origin button, and sanitized body
+   content.
+
+6. Run the acceptance tests that cover the API endpoints and the link rewriting
+   behaviour:
+
+   ```bash
+   pytest tests/http/test_viewer_api.py tests/services/test_origin_safe_rendering.py
+   ```
+
+These steps guarantee that the plugin is registered, the sandbox data is
+available, and the front-end bundle includes the origin-safe routes after a
+fresh container build.
+
 
 ## CI/CD
 

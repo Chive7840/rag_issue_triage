@@ -18,11 +18,8 @@ from api.utils.logging_utils import get_logger, logging_context
 
 logger = get_logger("api.services.retrieve")
 
-_GITHUB_ISSUE_RE = re.compile(r"^https://github\.com/([^/]+)/([^/])/issues/(\d+)(?:[?#/].*)?$", re.IGNORECASE)
-_JIRA_ISSUE_RE = re.compile(
-    r"^https://([A-Za-z0-9-]+)\.atlassian\.net/browse/([A-Za-z0-9][A-Za-z0-9_-]*-\d+)(?:[?#/].*)?$",
-    re.IGNORECASE
-)
+_GITHUB_ISSUE_RE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/issues/(\d+)(?:[?#/].*)?$", re.IGNORECASE)
+_JIRA_ISSUE_RE = re.compile(r"^https://([A-Za-z0-9-]+)\.atlassian\.net/browse/([A-Za-z0-9][A-Za-z0-9_-]*-\d+)(?:[?#/].*)?$", re.IGNORECASE)
 _URL_RE = re.compile(r"(https?://[^\s<>]+)")
 
 

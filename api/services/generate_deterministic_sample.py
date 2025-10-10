@@ -225,10 +225,11 @@ def synth_issue(
 ) -> dict:
     """Produce a deterministic-ish issue payload for ``flavor``."""
 
-    repos = CONFIG["repos"]; projects = CONFIG["project_keys"]
-    comps = CONFIG["components"]; users = CONFIG["users"]; labels_all = CONFIG["labels"]
-    types = CONFIG["issue_types_github"] if flavor == "github" else CONFIG["issue_types_jira"]
-    hourly = CONFIG["hourly_weight"]; lex = CONFIG["lex"]; tpls = CONFIG["templates"]
+    repos = CONFIG.repos; projects = CONFIG.project_keys
+    comps = CONFIG.components; users = CONFIG.users; labels_all = CONFIG.labels
+    types = CONFIG.issue_types_github if flavor == "github" else CONFIG.issue_types_jira
+    hourly = CONFIG.hourly_weight; lex = CONFIG.lex; tpls = CONFIG.templates
+
 
     repo = rng.choice(repos) if flavor == "github" else None
     project = rng.choice(projects) if flavor == "jira" else None
@@ -271,12 +272,12 @@ def synth_issue(
     )
 
     transitions, last_state, end_at = walk_fsm(rng, flavor, issue_type, created)
-    comments = synth_comments(rng, users, created, end_at, CONFIG["p_burst"])
+    comments = synth_comments(rng, users, created, end_at, CONFIG.p_burst)
     for comment in comments:
         comment["body"] = _apply_paraphrase(paraphraser, guard, comment.get("body", ""))
     closed_at = end_at.isoformat() if last_state in ("Closed", "Done") else None
 
-    if rng.random() < CONFIG["p_duplicate"] and "duplicate" not in labels:
+    if rng.random() < CONFIG.p_duplicate and "duplicate" not in labels:
         labels.append("duplicate")
 
     out = {
