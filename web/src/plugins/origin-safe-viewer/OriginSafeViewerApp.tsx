@@ -1,4 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { resolveApiUrl } from '../../apiClient';
 
 interface IssueViewerComment {
     author?: string | null;
@@ -97,7 +98,7 @@ export function OriginSafeViewerApp({ route }: OriginSafeViewerAppProps) {
         setIssueError(null);
         const controller = new AbortController();
         const encoded = encodeURIComponent(route);
-        fetch(`/api/issues/by-route/${encoded}`, { signal: controller.signal })
+        fetch(resolveApiUrl(`/api/issues/by-route/${encoded}`), { signal: controller.signal })
             .then(async (response) => {
                 if (!response.ok) {
                     if (response.status === 404) {
@@ -133,7 +134,7 @@ export function OriginSafeViewerApp({ route }: OriginSafeViewerAppProps) {
 
     useEffect(() => {
         let cancelled = false;
-        fetch('/api/routes')
+        fetch(resolveApiUrl('/api/routes'))
             .then((response) => {
                 if (!response.ok) {
                     throw new Error(`Failed to load routes (${response.status})`);
@@ -168,7 +169,7 @@ export function OriginSafeViewerApp({ route }: OriginSafeViewerAppProps) {
         });
         const query = params.toString();
         const url = query ? `/api/issues/search?${query}` : '/api/issues/search';
-        fetch(url)
+        fetch(resolveApiUrl(url))
             .then((response) => {
                 if (!response.ok) {
                     throw new Error(`Failed to load search (${response.status})`);

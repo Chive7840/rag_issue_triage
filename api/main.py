@@ -180,7 +180,10 @@ async def approve_triage(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="issue not found")
     raw = record["raw_json"] or {}
-    if payload.source == "github" and record["source"] == "github":
+    record_source = str(record["source"] or "").lower()
+    requested_source = str(payload.source or record_source).lower()
+
+    if requested_source == "github" and record_source == "github":
         repo = record["repo"]
         number = raw.get("issue", {}).get("number") or raw.get("number")
         if not (repo and number):
@@ -197,7 +200,7 @@ async def approve_triage(
                     await client.create_comment(repo, number, payload.comment)
         finally:
             await client.close()
-    elif payload.source == "jira" and record["source"] == "jira":
+    elif requested_source == "jira" and record_source == "jira":
         base_url = app.state.jira_base_url
         if not base_url:
             raise HTTPException(status_code=400, detail="jira base url missing")

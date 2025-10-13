@@ -54,7 +54,11 @@ def _vector_sql_literal(vector: Sequence[float]) -> str:
     return f"'{escaped}'::vector"
 
 
-def _row_value(row: asyncpg.Record, key: str, default: object | None = None) -> object | None:
+def _row_value(
+        row: asyncpg.Record | Mapping[str, Any],
+        key: str,
+        default: object | None = None
+) -> object | None:
     """Return a value from an asyncpg.Record or plain mapping without KeyErrors."""
 
     getter = getattr(row, "get", None)
@@ -104,8 +108,14 @@ def _resolve_url(row: asyncpg.Record) -> str | None:
 
     if project:
         key = external_key or issue_id
-        if key is not None:
-            return f"https://{project}.atlassian.net/browse/{key}"
+        if isinstance(project, str) and project:
+            project_key = project
+            if isinstance(external_key, str):
+                prefix, sep, suffix = external_key.partition("-")
+                if sep and prefix and prefix.lower() != project_key.lower() and str(issue_id).isdigit():
+                    key = str(issue_id)
+            if key is not None:
+                return f"https://{project_key}.atlassian.net/browse/{key}"
 
     if repo and str(issue_id).isdigit():
         return f"https://github.com/{repo}/issues/{issue_id}"

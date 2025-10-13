@@ -41,12 +41,11 @@ export default function IssueDetail() {
                 issue_id: issueId,
                 labels: labels ? labels.split(',').map((value) => value.trim()) : data?.labels ?? [],
                 assignee: assignee || undefined,
-                comment: comment || undefined,
-                source: 'github'
+                comment: comment || undefined
             });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['proposal', issueId] }); //TODO: check if adding .then() matters
+            queryClient.invalidateQueries({ queryKey: ['proposal', issueId] }).then(); //TODO: check if adding .then() matters
             setComment('');
         }
     });

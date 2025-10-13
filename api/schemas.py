@@ -49,7 +49,7 @@ class ProposalApproval(BaseModel):
     labels: list[str]
     assignee: Optional[str] = None
     comment: Optional[str] = None
-    source: str = "github"
+    source: Optional[str] = None
 
 
 class SearchResponse(BaseModel):
