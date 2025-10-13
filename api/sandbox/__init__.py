@@ -1,4 +1,4 @@
-"""Sandbox bootstrap utilities for deterministic demo data."""
+"""Sandbox bootstrap utilities for bundled demo data."""
 
 from __future__ import annotations
 

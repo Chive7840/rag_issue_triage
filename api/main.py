@@ -180,6 +180,24 @@ async def approve_triage(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="issue not found")
     raw = record["raw_json"] or {}
+    if isinstance(raw, str):
+        try:
+            raw = app.state.json_loads(raw)
+        except json.JSONDecodeError as exc:
+            logger.exception("Failed to decode stored raw issue payload as JSON")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="stored issue payload is not valid JSON",
+            ) from exc
+    elif isinstance(raw, (bytes, bytearray, memoryview)):
+        try:
+            raw = app.state.json_loads(bytes(raw).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            logger.exception("Failed to decode stored raw issue payload from bytes")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="stored issue payload is not valid JSON"
+            ) from exc
     record_source = str(record["source"] or "").lower()
     requested_source = str(payload.source or record_source).lower()
 

@@ -34,11 +34,11 @@ services:
     env_file:
       - ../.env.sandbox
     environment:
-      SANDBOX_DATA_DIR: /app/db/synth_data
+      SANDBOX_DATA_DIR: /app/db/sandbox
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["python", "-m", "api.sandbox.bootstrap", "bootstrap", "--data-dir", "/app/db/synth_data"]
+    command: ["python", "-m", "api.sandbox.bootstrap", "bootstrap", "--data-dir", "/app/db/sandbox"]
     restart: "no"
 
   api:
@@ -64,7 +64,7 @@ services:
     env_file:
       - ../.env.sandbox
     environment:
-      SANDBOX_DATA_DIR: /app/db/synth_data
+      SANDBOX_DATA_DIR: /app/db/sandbox
     depends_on:
       postgres:
         condition: service_healthy
