@@ -56,6 +56,7 @@ export default function SearchView() {
                                     }
                                 }}
                             >
+                                {item.title}
                             </button>
                         ) : (
                             item.title

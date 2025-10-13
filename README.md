@@ -204,37 +204,28 @@ Add functionality to Sandbox the program without live data from GitHub or Jira -
 
 - A Docker Compose topology that mirrors production services while remaining self-contained.
 - Modern base images and dependency management approaches that avoid deprecated runtimes.
-- Synthetic GitHub and Jira datasets with deterministic seeding for repeatable demos.
+- Bundled synthetic GitHub and Jira datasets checked into the repo for repeatable demos.
 - Automation for database initialization, embedding warm-up, and observability.
 - Portfolio polish, including walkthrough assets and reset scripts.
 
 ### Synthetic Data Strategy
 
-The deterministic issue generator under `api/services/generate_deterministic_sample.py` now supports Local paraphrasing
-so that synthetic records better reflect natural variations. The variations will not violate Lockable entities such as
-repo names, timestamps, or code blocks.
+Synthetic GitHub and Jira archives live under `db/sandbox` inside the repository.
+They are generated offline and checked in so the sandbox boots instantly without
+any deterministic CLI tooling. The paraphrasing pipeline relies on Hugging Face's
+`t5-small` inference API to keep the language varied while respecting sensitive
+entities.
 
-- **Providers**
-  - `rule` (default): Lightweight synonym swaps, passive/active voice flips, and filler removal constrained by an edit budget.
-  - `hf_local`: optional Hugging Face `text2text-generation` pipeline that loads from an on-disk cache and stays offline at
-    runtime. Downloads are disabled unless explicitly permitted.
-- **Locked entities** – Repo/project identifiers, URLs, file paths, timestamps, versions, inline/fenced code, and stack traces
-  are masked before any provider runs to guarantee identical restoration afterwards.
-- **Budgets** – Set `--paraphrase-budget` (default 15 tokens) and the provider respects a 25% edit ceiling per section.
-- **Caching & offline requirement** – `hf_local` reads the model from `HF_CACHE_DIR` (defaults to `.cache/hf`). If the cache is
-  empty and downloads are disabled, the CLI raises a clear error so you can prime the cache ahead of time.
-- **CLI flags**
-   - `--paraphrase {off|rule|hf_local}` to select the provider.
-   - `--hf-model`, `--hf-cache`, `--hf-device`, and `--hf-allow-downloads` for Hugging Face overrides.
-   - `--seed` governs deterministic edits for both providers.
+- **Provider** – `hf_api` (default) invokes the hosted Hugging Face inference API.
+  Provide `HUGGINGFACE_API_TOKEN` when authenticated access is required; otherwise
+  the client falls back to the public endpoint limits.
+- **Locked entities** – Repo/project identifiers, URLs, file paths, timestamps,
+  versions, inline/fenced code, and stack traces are masked before any API call so
+  they are restored verbatim afterwards.
+- **Budgets** – `paraphrase_budget` still defaults to 15 tokens with a 25% edit
+  ceiling per section to avoid excessive rewrites.
+- **Updating data** – Refresh the NDJSON archives manually when new demo scenarios
+  are required, then commit them alongside documentation changes.
 
-Example commands:
 
-```bash
-# rule-based paraphrasing
-python -m api.services.generate_deterministic_sample --flavor github --count 200 --paraphrase rule
-
-# hf_local using cached t5-small on GPU 0 (downloads allowed only for the priming run)
-PARAPHRASE_MODEL=t5-small HF_CACHE_DIR=.cache/hf HF_DEVICE=cuda:0 \
-python -m api.services.generate_deterministic_sample --flavor jira --count 100 --paraphrase hf_local --hf-device cuda:0 --hf-allow-downloads
-```
+TODO Item: Build in dynamic label suggestions during approval flow based on semantic matches to the issue corpus.

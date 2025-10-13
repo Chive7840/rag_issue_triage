@@ -1,30 +1,23 @@
 """Utilities for protecting locked entities and paraphrasing issue text.
 
-This module powers two paraphrasing strategies:
-
-* :class:`RuleBasedParaphraser` applies deterministic edits (synonym swaps,
-sentence shuffles, filler removal) under a strict budget.
-* :class:`HFLocalParaphraser` wraps a local Hugging Face pipeline that can run
-fully offline once a model is cached on disk.
-
-Both strategies cooperate with :class:`LockedEntityGuard`, which masks sensitive
-artifacts (URLS, stack traces, inline code, etc.) before paraphrasing and
-restores them afterwards so downstream consumers see untouched protected spans.
+The paraphrasing stack delegates to Hugging Face's hosted ``t5-small``
+inference API. :class:`LockedEntityGuard` masks sensitive entities before
+paraphrasing and restores them afterward while
+:class:`HFApiParaphraser` enforces token budgets and handles remote inference.
 """
 
 from __future__ import annotations
 
-import json, random, re, os
+import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from api.utils.logging_utils import get_logger, logging_context
+from api.utils.logging_utils import get_logger
 
 ReplacementList = List[Tuple[str, str]]
 
-_CONFIG_CACHE: Optional[dict] = None
 logger = get_logger("api.services.paraphrase_engine")
 
 
@@ -77,26 +70,6 @@ def _count_token_edits(source: Sequence[str], target: Sequence[str]) -> int:
         elif tag == "insert":
             edits += j2 - j1
     return edits
-
-
-def _load_config() -> dict:
-    """Load paraphraser configuration from :mod:`skeleton_config.yaml`.
-
-    The configuration file is formatted as JSON to avoid a dependency on a YAML
-    parser. We memoise the parsed structure to dodge repeated disk I/O because
-    the paraphrasers are instantiated frequently during sampling.
-    """
-
-    global _CONFIG_CACHE
-    if _CONFIG_CACHE is not None:
-        return _CONFIG_CACHE
-    config_path = Path(__file__).with_name("skeleton_config.yaml")
-    if not config_path.exists():
-        _CONFIG_CACHE = {}
-        return _CONFIG_CACHE
-    with config_path.open("r", encoding="utf-8") as handle:
-        _CONFIG_CACHE = json.load(handle)
-    return _CONFIG_CACHE
 
 
 class LockedEntityGuard:
@@ -177,7 +150,7 @@ class LockedEntityGuard:
         spans.sort(key=lambda item: item[0])
         result_parts: List[str] = []
         cursor = 0
-        replacements: List[Tuple[str, str]] =[]
+        replacements: List[Tuple[str, str]] = []
         for idx, (start, end, value) in enumerate(spans):
             result_parts.append(text[cursor:start])
             placeholder = self._placeholder(idx)
@@ -231,158 +204,6 @@ class BaseParaphraser:
         return ParaphraseResult(text=text, edited_tokens=0, total_tokens=len(_tokenize(text)))
 
 
-class RuleBasedParaphraser(BaseParaphraser):
-    """Deterministic paraphraser that performs template-driven edits."""
-
-    _WORD_PATTERN = re.compile(r"\b\w+\b")
-
-    def __init__(self, seed: str, paraphrase_budget: int, max_edits_ratio: float = 0.25) -> None:
-        """Initialize the deterministic paraphraser using the shared config."""
-
-        super().__init__(paraphrase_budget=paraphrase_budget, max_edits_ratio=max_edits_ratio)
-        self.seed = seed
-        cfg = _load_config()
-        synonyms_cfg = cfg.get("synonyms", {})
-        self.synonyms: Dict[str, List[str]] = {}
-        for category in synonyms_cfg.values():
-            for head, options in category.items():
-                group = [head, *options]
-                lowered = [word.lower() for word in group]
-                for idx, word in enumerate(lowered):
-                    replacements = [w for i, w in enumerate(lowered) if i != idx]
-                    self.synonyms[word] = replacements
-        self.filler_phrases = cfg.get("filler_phrases", [])
-        self.voice_patterns = cfg.get("voice_patterns", {})
-
-    @staticmethod
-    def _match_case(source: str, template: str) -> str:
-        """Mirror the capitalization style of ``template`` in ``source``."""
-
-        if template.isupper():
-            return source.upper()
-        if template[0].isupper():
-            return source.capitalize()
-        return source
-
-    def _remove_fillers(self, text: str, allowed: int, edits: int) -> Tuple[str, int]:
-        """Remove filler phrases while respecting edit budgets."""
-
-        for phrase in self.filler_phrases:
-            if edits >= allowed:
-                break
-            words_removed = len([t for t in phrase.split() if t])
-            if words_removed == 0:
-                continue
-            pattern = re.compile(rf"\b{re.escape(phrase)}\b", re.IGNORECASE)
-            while edits < allowed:
-                match = pattern.search(text)
-                if not match:
-                    break
-                if edits + words_removed > allowed:
-                    break
-                start, end = match.span()
-                text = text[:start] + text[end:]
-                edits += words_removed
-        return text, edits
-
-    def _apply_synonyms(self, text: str, rng: random.Random, allowed: int, edits: int) -> Tuple[str, int]:
-        """Swap eligible words with synonyms using deterministic randomness."""
-
-        def repl(match: re.Match[str]) -> str:
-            nonlocal edits
-            if edits >= allowed:
-                return match.group(0)
-            word = match.group(0)
-            if "\uf8ff" in word:
-                return word
-            lower = word.lower()
-            if lower not in self.synonyms:
-                return word
-            options = [opt for opt in self.synonyms[lower] if opt != lower]
-            if not options:
-                return word
-            replacement = rng.choice(options)
-            replacement = self._match_case(replacement, word)
-            if replacement == word:
-                return word
-            edits += 1
-            return replacement
-
-        return self._WORD_PATTERN.sub(repl, text), edits
-
-    def _apply_voice_patterns(self, text: str, allowed: int, edits: int) -> Tuple[str, int]:
-        """Toggle between passive/active voice per configured regex rules."""
-
-        def apply(patterns: Iterable[dict], current: str, edits_in: int) -> Tuple[str, int]:
-            edits_local = edits_in
-            for entry in patterns:
-                if edits_local >= allowed:
-                    break
-                regex = re.compile(entry.get("pattern", ""), re.IGNORECASE)
-                template = entry.get("replacement", "")
-                def _repl(match: re.Match[str]) -> str:
-                    nonlocal edits_local
-                    if edits_local >= allowed:
-                        return match.group(0)
-                    original = match.group(0)
-                    if "\uf8ff" in original:
-                        return original
-                    data = {key: value for key, value in match.groupdict().items() if value is not None}
-                    replacement = template.format(**data)
-                    source_tokens = len(_tokenize(original))
-                    target_tokens = len(_tokenize(replacement))
-                    cost = max(source_tokens, target_tokens)
-                    if cost == 0:
-                        cost = 1
-                    if edits_local + cost > allowed:
-                        return original
-                    edits_local += cost
-                    return replacement
-                current = regex.sub(_repl, current, count=1)
-            return current, edits_local
-
-        passive_patterns = self.voice_patterns.get("passive_to_active", [])
-        active_patterns = self.voice_patterns.get("active_to_passive", [])
-        text, edits = apply(passive_patterns, text, edits)
-        text, edits = apply(active_patterns, text, edits)
-        return text, edits
-
-    def _reorder_sentences(self, text: str, rng: random.Random, allowed: int, edits: int) -> Tuple[str, int]:
-        """Swap neighboring sentences to introduce light variation."""
-
-        if edits >= allowed:
-            return text, edits
-        sentences = re.split(r"(?<=[.!?])\s+", text)
-        if len(sentences) < 2:
-            return text, edits
-        idx = rng.randrange(0, len(sentences) - 1)
-        sentences[idx], sentences[idx + 1] = sentences[idx + 1], sentences[idx]
-        cost = min(2, allowed - edits)
-        edits += cost
-        return " ".join(sentences), edits
-
-    def paraphrase(self, text: str, constraints: Optional[dict] = None) -> ParaphraseResult:
-        """Apply rule-based edits within the configured budget."""
-
-        tokens = _tokenize(text)
-        total_tokens = len(tokens)
-        allowed = self._allowed_edits(total_tokens)
-        if allowed == 0 or not text.strip():
-            return ParaphraseResult(text=text, edited_tokens=0, total_tokens=total_tokens)
-        rng = random.Random(f"{self.seed}:{text}")
-        edits = 0
-        updated = text
-        updated, edits = self._remove_fillers(updated, allowed, edits)
-        updated, edits = self._apply_synonyms(updated, rng, allowed, edits)
-        updated, edits = self._apply_voice_patterns(updated, allowed, edits)
-        if edits < allowed:
-            updated, edits = self._reorder_sentences(updated, rng, allowed, edits)
-        updated_tokens = _tokenize(updated)
-        edits_count = _count_token_edits(tokens, updated_tokens)
-        edits_count = min(edits_count, allowed)
-        return ParaphraseResult(text=updated, edited_tokens=edits_count, total_tokens=total_tokens)
-
-
 class LLMParaphraser(BaseParaphraser, ABC):
     """Shared scaffolding for paraphrasers backed by language models."""
 
@@ -409,77 +230,39 @@ class LLMParaphraser(BaseParaphraser, ABC):
         return ParaphraseResult(text=generated, edited_tokens=edits, total_tokens=total_tokens)
 
 
-class HFLocalParaphraser(LLMParaphraser):
-    """Local Hugging Face paraphraser constrained to cached models."""
+class HFApiParaphraser(LLMParaphraser):
+    """Paraphraser backed by Hugging Face's hosted inference API."""
 
     def __init__(
             self,
             model_name: Optional[str] = None,
-            cache_dir: Optional[str] = None,
-            allow_downloads: bool = False,
+            token: Optional[str] = None,
             paraphrase_budget: int = 15,
             max_edits_ratio: float = 0.25,
+            max_new_tokens: int = 48,
             seed: str = "",
+            client: Optional[Any] = None,
     ) -> None:
-        """Initialize the pipeline while respecting offline requirements."""
 
         super().__init__(paraphrase_budget=paraphrase_budget, max_edits_ratio=max_edits_ratio)
         self.model_name = model_name or os.getenv("PARAPHRASE_MODEL", "t5-small")
-        cache_env = os.getenv("HF_CACHE_DIR", str(cache_dir) if cache_dir else ".cache/hf")
-        self.cache_dir = Path(cache_dir or cache_env)
-        if not cache_dir and not os.getenv("HF_CACHE_DIR"):
-            self.cache_dir = Path(cache_env)
-        allow_env = os.getenv("HF_ALLOW_DOWNLOADS")
-        if allow_env is not None and not allow_downloads:
-            allow_downloads = allow_env.lower() in {"1", "true", "yes"}
-        self.allow_downloads = allow_downloads
+        self.max_new_tokens = max(1, max_new_tokens)
         self.seed = seed
-        self.max_new_tokens = 48
-        try:
-            from transformers import (
-                AutoModelForSeq2SeqLM,
-                AutoTokenizer,
-                pipeline,
-            )
-        except ImportError as exc:  # pragma: no cover - dependency guard
-            raise RuntimeError("transformers is required for hf_local paraphrasing") from exc
 
-        model_kwargs = {
-            "cache_dir": str(self.cache_dir),
-            "local_files_only": not self.allow_downloads,
-        }
-        try:
-            model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name, **model_kwargs)
-            tokenizer = AutoTokenizer.from_pretrained(self.model_name, **model_kwargs)
-        except OSError as err:
-            if not self.allow_downloads:
-                raise RuntimeError(
-                    f"Paraphrase model '{self.model_name}' not available in cache {self.cache_dir}."
-                    "Allow downloads with --hf-allow-downloads to fetch it once."
-                ) from err
-            raise
-        pipe_kwargs = {
-            "task": "text2text-generation",
-            "model": model,
-            "tokenizer": tokenizer,
-            "device_map": "auto",
-        }
-        try:
-            self._pipeline = pipeline(**pipe_kwargs)    # type: ignore[arg-type]
-        except TypeError:
-            pipe_kwargs.pop("task", None)
-            self._pipeline = pipeline("text2text-generation", **pipe_kwargs)
-        except Exception as err:    # pragma: no cover - fallback
-            raise RuntimeError(f"Failed to initialize paraphrase model: {err}") from err
-        try:
-            self._pipeline(["test"], max_new_tokens=1)
-        except Exception:
-            pass
-        lower_name = self.model_name.lower()
-        self._needs_prefix = "ts" in lower_name or "flan" in lower_name
+        if client is not None:
+            self._client= client
+        else:
+            try:
+                from huggingface_hub import InferenceClient
+            except ImportError as exc:  # pragma: no cover - dependency guard
+                raise RuntimeError("huggingface-hub is required for hf_api paraphrasing") from exc
+            auth_token = token or os.getenv("HUGGING_FACE_API_TOKEN") or None
+            self._client = InferenceClient(model=self.model_name, token=auth_token)
+        self._needs_prefix = True
+
 
     def _apply_constraints(self, text: str, constraints: dict) -> Tuple[str, ReplacementList]:
-        """Mask the ``do_not_change`` spans before running generation."""
+        """Mask spans listed in ``constraints`` before generating."""
 
         protected = constraints.get("do_not_change") if constraints else None
         if not protected:
@@ -493,7 +276,7 @@ class HFLocalParaphraser(LLMParaphraser):
         return updated, replacements
 
     def _restore_constraints(self, text: str, spans: Iterable[Tuple[str, str]]) -> str:
-        """Reinsert masked spans after language model generation."""
+        """Restore masked spans in ``text`` using ``spans``."""
 
         restored = text
         for placeholder, value in spans:
@@ -501,25 +284,44 @@ class HFLocalParaphraser(LLMParaphraser):
         return restored
 
     def generate(self, text: str, constraints: Optional[Dict[str, Any]], seed: str) -> str:
-        """Generate a paraphrase through the local pipeline and unmask spans."""
+        """Request a paraphrase from the Hugging Face inference API."""
 
-        safe_text, spans = self._apply_constraints(text, constraints or{})
+        safe_text, spans = self._apply_constraints(text, constraints or {})
         prefix = "paraphrase: " if self._needs_prefix else ""
         prompt = prefix + safe_text
         options = {
             "max_new_tokens": self.max_new_tokens,
-            "num_beams": 1,
-            "do_sample": False,
             "temperature": 0.0,
+            "top_p": 1.0,
+            "do_sample": False,
+            "return_full_text": False,
         }
-        outputs = self._pipeline(prompt, **options)
-        if not outputs:
+        try:
+            response = self._client.text_generation(prompt, **options)
+        except TypeError:
+            options.pop("return_full_text", None)
+            response = self._client.text_generation(prompt, **options)
+        except Exception:
+            logger.exception("Hugging Face paraphrase request failed")
             return text
-        candidate = outputs[0]
-        generated = candidate.get("generated_text") or candidate.get("summary_text") or text
-        generated = self._restore_constraints(generated, spans)
-        return generated
-
+        generated: Optional[str]
+        if isinstance(response, str):
+            generated = response
+        elif isinstance(response, dict):
+            generated = response.get("generated_text") or response.get("text")
+        elif isinstance(response, (list, tuple)) and response:
+            first = response[0]
+            if isinstance(first, dict):
+                generated = first.get("generated_text") or first.get("text")
+            else:
+                generated = getattr(first, "generated_text", None) or getattr(first, "text", None)
+        else:
+            generated = getattr(response, "generated_text", None) or getattr(response, "text", None)
+        if not generated:
+            generated = text
+        else:
+            generated = generated.strip() or text
+        return self._restore_constraints(generated, spans)
 
 class ProviderRegistry:
     """Factory helpers that produce configured paraphraser instances."""
@@ -531,25 +333,22 @@ class ProviderRegistry:
         Parameters
         ----------
         name:
-            Provider key (``"off"`` | ``"rule"`` | ``"hf_local"``).
+            Provider key (``"off"`` | ``"hf_api"``).
         **kwargs:
             Extra keyword arguments forwarded to concrete paraphrasers.
         """
 
-        if name == "rule":
-            seed = kwargs.get("seed", "")
-            paraphrase_budget = kwargs.get("paraphrase_budget", 15)
-            max_edits_ratio = kwargs.get("max_edits_ratio", 0.25)
-            return RuleBasedParaphraser(seed=seed, paraphrase_budget=paraphrase_budget, max_edits_ratio=max_edits_ratio)
-        if name == "hf_local":
-            return HFLocalParaphraser(
+        normalized = (name or "hf_api").lower()
+        if normalized in {"hf_api", "hf"}:
+            return HFApiParaphraser(
                 model_name=kwargs.get("model_name"),
-                cache_dir=kwargs.get("cache_dir"),
-                allow_downloads=kwargs.get("allow_downloads", False),
+                token=kwargs.get("token"),
                 paraphrase_budget=kwargs.get("paraphrase_budget", 15),
                 max_edits_ratio=kwargs.get("max_edits_ratio", 0.25),
+                max_new_tokens=kwargs.get("max_new_tokens", 48),
                 seed=kwargs.get("seed", ""),
+                client=kwargs.get("client"),
             )
-        if name == "off":
+        if normalized in {"off", "none"}:
             return BaseParaphraser(paraphrase_budget=0)
         raise ValueError(f"Unknown paraphrase provider `{name}`")

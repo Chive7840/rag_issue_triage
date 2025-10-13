@@ -15,6 +15,7 @@ dependencies = [
     "asyncpg==0.30.0",
     "redis[hiredis]==6.4.0",
     "httpx==0.28.1",
+    "huggingface-hub==0.26.2",
     "python-dotenv==1.1.1",
     "sentence-transformers==5.1.1",
     "numpy==2.3.3",
